@@ -1,11 +1,12 @@
 package OODoc::Template;
-our $VERSION = '0.01';
 
-=head1 NAME
+use IO::File   ();
+
+=chapter NAME
 
 OODoc::Template - Simple template system
 
-=head1 SYNOPSYS
+=chapter SYNOPSYS
 
  use OODoc::Template;
  my $t = OODoc::Template->new;
@@ -16,20 +17,29 @@ OODoc::Template - Simple template system
  select OUTPUT;
  $t->parse($template, \%values);
 
-=head1 DESCRIPTION
+=chapter DESCRIPTION
 
 The OODoc::Template is probably the simpelest (most feature-less)
 template system you can image, but still capable of doing almost
 everything.
 
-=head1 METHODS
+=chapter METHODS
 
-=over 4
+=c_method new OPTIONS
+Create a new formatter object.  The C<template> and C<search> options can
+be overruled just as any other value.
 
-=item new OPTIONS
+=option  template CODE
+=default template <build-in>
+The callback to insert some template.  This is treated and used as any
+other value.  By default M<includeTemplate()> is called.
 
-Create a new formatter object.  There are no OPTIONS defined yet.
-
+=option  search STRING|ARRAY
+=default search '.'
+A colon separated list of directories, packed in a STRING or an ARRAY
+of directories, to be searched to find a named template.  All search paths
+are used when a template is being searched for, from inside out defined by
+the nestings.
 =cut
 
 sub new(@)
@@ -39,33 +49,42 @@ sub new(@)
 
 sub init($)
 {   my ($self, $args) = @_;
+
+    my $templ  = $args->{template} || sub { $self->includeTemplate($_[1]) };
+
+    $self->pushValues
+     ( template => $templ
+     , search   => '.'
+     );
+    
     $self;
 }
 
-=item parse TEMPLATE, VALUES
-
+=method parse TEMPLATE, (VALUES|PAIRS)
 The TEMPLATE is a string, which is processed.  All tags are replaced
 by values.  The VALUES is a hash which relates tags to values to be
-inserted.  See L</Values> about the ways to control the output.
+inserted.  These parameters can also be passed as list of PAIRS.
 
+See L</Values> about the ways to control the output.
 =cut
 
-sub parse($$)
-{   my ($self, $template, $values) = @_;
+sub parse($@)
+{   my ($self, $template) = (shift, shift);
 
-    my $uplevel      = $self->{values}; # unshift values
-    $values->{NEXT}  = $uplevel;
-    $self->{values}  = $values;
+    my $values = @_==1 ? shift : {@_};
+    $values->{source} ||= 'parse()';
+    $self->pushValues($values);
 
     while( $template =~ s|^(.*?)        # text before container
                            \<\!\-\-\{   # tag open
-                           \s* (\w+)    # tag
+                           \s* (NOT_)?
+                               (\w+)    # tag
                            \s* (.*?)    # attributes
                            \s* \}\-\-\> # tag open end
                          ||sx
          )
     {   print $1;
-        my ($tag, $attributes) = ($2, $3);
+        my ($not, $tag, $attributes) = ($2, $3, $4);
 
         if($template =~ s| (.*?)             # something
                            ( \<\!\-\-\{      # tag close
@@ -78,8 +97,8 @@ sub parse($$)
             my ($container, $endtag) = ($1, $2);
 
             if( $container =~ m/\<\!\-\-\{\s*$tag\b/ )
-            {   # oops: container is terminated for a brother.  Try to
-                # correct my greedyness.
+            {   # oops: container is terminated for a brother (nesting
+                # is not permitted. Try to correct my greedyness.
                 $template = $container.$endtag.$template;
                 $self->handle($tag, $attributes, undef);
             }
@@ -95,10 +114,26 @@ sub parse($$)
     }
 
     print $template;                    # remains
-    $self->{values} = $uplevel;         # shift values
+    $self->popValues;
 }
 
-=item handle TAG, ATTRIBUTES, TEXT
+=method parseFile FILENAME, (VALUES|PAIRS)
+Parse the content of the file with specified FILENAME.  The current value
+of C<search> is used as path to find it.
+=cut
+
+sub parseFile($@)
+{   my ($self, $filename) = (shift, shift);
+    
+    my $values = @_==1 ? shift : {@_};
+    $values->{source} ||= 'parseFile()';
+
+    $self->parse($self->loadTemplate($filename));
+}
+
+=section Internals
+
+=method handle TAG, [ATTRIBUTES, [TEXT]]
 
 The TAG was found to be filled-in.  In the block of the start tags,
 some extra ATTRIBUTES (here still as string) may be specified. The
@@ -108,8 +143,10 @@ terminator.  You probably will not call this method.
 
 =cut
 
-sub handle($$$)
+sub handle($;$$)
 {   my ($self, $tag, $attributes, $container) = @_;
+    defined $attributes or $attributes = '';
+    defined $container  or $container  = '';
 
     my %attrs;
     while( $attributes =~
@@ -117,12 +154,35 @@ sub handle($$$)
            \s* (?: \=\> \s*             # optional value
                    ( \"[^"]*\"          # dquoted value
                    | \'[^']*\'          # squoted value
+                   | \$\{ [^}]* \}      # complex variable
+                   | \$\w+              # simple variable
                    | \S+                # unquoted value
                    )
                 )?
                 \s* \,?                 # optionally separated by commas
           //xs)
-    {   $attrs{$1} = $2;
+    {  my ($k, $v) = ($1, $2);
+       defined $v or $v = 1;
+
+       if($v =~ m/^\'(.*)\'$/)
+       {  # Single quoted parameter, no interpolation
+          $v = $1;
+       }
+       elsif($v =~ m/^\"(.*)\"$/)
+       {  # Double quoted parameter, with interpolation
+          $v = $1;
+          $v =~ s/\$\{(\w+)\s*(.*?)}|\$(\w+)/$self->handle($1, $2)/ge;
+       }
+       elsif($v =~ m/^\$\{(\w+)\s*(.*?)}$/)
+       {  # complex variables
+          $v = $self->handle($1, $2);
+       }
+       elsif($v =~ m/^\$(\w+)$/)
+       {  # simple variables
+          $v = $self->handle($1);
+       }
+
+       $attrs{$k} = $v;
     }
 
     my $value  = $self->valueFor($tag, \%attrs, \$container);
@@ -134,13 +194,11 @@ sub handle($$$)
     else { die "Huh? value for $tag is a ".ref($value)."\n" }
 }
 
-=item valueFor TAG, ATTRIBUTES, TEXTREF
-
+=method valueFor TAG, ATTRIBUTES, TEXTREF
 Lookup the value for TAG in the known data.  See L</Values> about the
 way this is done.  The ATTRIBUTES (hash of key-values) and TEXTREF
 (text of contained block) are used when the TAG related to a code
 reference which is to produce new values dynamicly.
-
 =cut
 
 sub valueFor($$$)
@@ -166,16 +224,122 @@ sub valueFor($$$)
     undef;
 }
 
-=back
+=method allValuesFor TAG
+Collects all values related to TAG in all nestings of values.  The most
+preferred is listed first.
+=cut
 
-=head1 DETAILS
+sub allValuesFor($)
+{   my ($self, $tag) = @_;
+    my @values;
+
+    for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
+    {   
+        if(defined(my $v = $set->{$tag}))
+        {   my $t = ref $v eq 'CODE' ? $v->($tag, $attrs, $textref) : $v;
+            push @values, $t if defined $t;
+        }
+
+        if(defined(my $code = $set->{DYNAMIC}))
+        {   my $t = $code->($tag, $attrs, $textref);
+            push @values, $t if defined $t;
+        }
+    }
+
+    @values;
+}
+
+=method pushValues HASH
+Add new level of values to the known list.  The data in the HASH is
+copied, and a reference to the copy returned.  The copy may be changed
+afterwards.
+=cut
+
+sub pushValues($)
+{   my ($self, $attrs) = @_;
+    $self->{values} = { %$attrs, NEXT => $self->{values} };
+}
+
+=method popValues
+Remove one level of values.
+=cut
+
+sub popValues()
+{   my $self = shift;
+    $self->{values} = $self->{values}{NEXT};
+}
+
+=method includeTemplate ATTRIBUTES
+This is the default implementation for the "template" tag.  The ATTRIBUTES
+are set as values, visible in the included file.  Useful attributes are
+C<file> -to specified an input file- and C<search> to define directories
+as template search path.
+=cut
+
+sub includeTemplate($)
+{   my ($self, $attrs) = @_;
+    my $values = $self->pushValues($attrs);
+
+    my $fn = $self->valueFor('file');
+    unless(defined $fn)
+    {   my $source = $self->valueFor('source') || '??';
+        die "ERROR: there is no filename found with template in $source\n";
+    }
+
+    $self->popValues;
+}
+
+=method loadTemplate FILENAME
+Returns the string, which is the whole contents of the file, and some
+info about the file as HASH.
+=cut
+
+sub loadTemplate($)
+{   my ($self, $relfn) = @_;
+    my $absfn;
+
+    if(File::Spec->file_name_is_absolute($relfn))
+    {   my $fn = File::Spec->canonpath($relfn);
+        $absfn = $fn if -f $fn;
+    }
+
+    unless($absfn)
+    {   my @srcs = map { ref $_ eq 'ARRAY' ? @$_ : split(':',$_) }
+                      $self->allValuesFor('source');
+
+        foreach my $dir (@srcs)
+        {   my $fn = File::Spec->rel2abs($relfn, $dir);
+            last if -f $fn;
+        }
+    }
+
+    unless($absfn)
+    {   my $source = $self->valueFor('source');
+        die "ERROR: Cannot find template $relfn as mentioned in $source\n";
+    }
+
+    if(my $cached = $templ_cache{$absfn})
+    {   my $mtime = $cached->[1]{mtime};
+        return @$cached if -M $absfn==$mtime;
+    }
+
+    my $in = IO::File->new($absfn, 'r');
+    unless(defined $in)
+    {   my $source = $self->valueFor('source');
+        die "ERROR: Cannot read from $absfn, named in $source\n";
+    }
+
+    join '', $in->getlines;  # auto-close in
+}
+
+=chapter DETAILS
 
 This module work as simple as possible: pass a string to the C<parse>
 method with some values to be inserted in the string, and the result
 is printed to stdout.  See the C<select> statement of Perl to read how
 to redirect the output to a different destination, for instance a file.
 
-=head2 Getting started
+=section Getting started
 
 The general set-up is like this:
 
@@ -189,6 +353,8 @@ The general set-up is like this:
  select OUTPUT;
 
  $t->parse($template, \%values);
+
+=section Expanding
 
 The C<$template> string contains HTML with special comment blocks.  These
 special comment blocks are replaced by the specified C<values>.  The block
@@ -206,8 +372,28 @@ The first shows a I<container>, the second a terminal tag.  The TAG is
 one of the specified values. ATTRIBUTES are used when the TAG is not a
 constant value, but dynamically produced.
 
+When the TAG starts with "NOT_", it is used to negate
+the boolean interpretation of the values returned by evaluating the tag:
+
+ <!--{NOT_want_something ATTRIBUTES}-->
+   ...
+ <!--{/want_something}-->
+
+An if-then-else looks like this:
+
+ <!--{want_something ATTRIBUTES}-->
+   ...
+ <!--{ELSE_want_something}-->
+   ...
+ <!--{/want_something}-->
+
+=section Tags
+
+Tags are barewords (may only contain [0-9a-zA-Z_]), which are looked-up in
+the "%values", which are passed with M<parse()> to produce a value (see
+section about Values).
  
-=head2 Attributes
+=section Attributes
 
 Attibutes are values which are used when the text which is to be inserted
 is produced dynamically.  Their syntax is like this:
@@ -222,16 +408,26 @@ is produced dynamically.  Their syntax is like this:
        | bareword => "string'
        | bareword => 'string'
        | bareword => bareword
+       | bareword => variable
 
-Example:
+ # pass value produced by other tag
+ variable:
+         '$' tag
+       | '${' tag attrs '}'
 
- <!--{section nr=> 2, show_number, a => "monkey"}-->
+
+A string may contain variables, which are stringified.  This means that
+tags which produce hashes or arrays are not usuable to interpolate.
+
+=example
+
+ <!--{section nr => 2, show_number, a => "monkey", chapter => $cnr}-->
 
 The attributes result (internally) in a hash (of ARGS) which contains
-the keys C<nr>, C<show_number>, and C<a> with respecively values
-C<2>, C<true>, and C<monkey>.
+the keys C<nr>, C<show_number>, C<a>, and C<chapter> with respecively
+values C<2>, true, C<monkey>, and the looked-up value for C<cnr>.
 
-=head2 Values
+=section Values
 
 The values which are related to the tags are rather powerful.  When
 a certain tag can not be found, the value is C<undef>.
@@ -239,18 +435,15 @@ a certain tag can not be found, the value is C<undef>.
 =over 4
 
 =item * undef
-
 When the value is C<undef> (explicitly or because it was not found),
 the container or terminator will be skipped.  The whole text simply
 disappears.
 
 =item * string
-
 When the value is a C<string>, that string is inserted.  In case of
 a container, the container's text is not used.
 
 =item * HASH
-
 In case the value is (reference to, of course) a HASH, the values
 of that HASH are remembered.  They are used when parsing the contents
 of the container, and overrule the values defined by encapsulating
@@ -260,13 +453,11 @@ The HASH key of C<DYNAMIC> has a special purpose, which is described in
 the next section.  The C<NEXT> key is reserved.
 
 =item * ARRAY of HASHes
-
 When the value is an ARRAY of HASHes, the container is parsed again
 for each HASH.  In practice, this is a C<foreach> loop over the
 array.
 
 =item * CODE
-
 As last option, you can provide a CODE reference.  This function is
 called with the tag, the specified attributes (as HASH reference),
 and the container's text.  The value which is returned can be anything
@@ -274,7 +465,7 @@ of the above (only CODE references are not accepted).
 
 =back
 
-=head2 DYNAMIC value
+=section DYNAMIC value
 
 The procedure of a value lookup is quite straight forward: start with
 the values defined by the innermost block (container) which defined a
@@ -294,13 +485,6 @@ The C<DYNAMIC> keys may be used like AUTOLOAD: to handle unexpected
 keys.  For instance, used in the initial hash of values (passed to
 the C<parse> method) it can be used to produce warnings on use of
 undefined tags.
-
-=head2 Examples
-
-Examples can be found in the manual page of the more powerful
-L<Text::MagicTemplate|Text::MagicTemplate> module.  It's tutorial
-page explains how you can use the values to build switches, and
-other complex behavior.
 
 =cut
 

@@ -1,0 +1,9 @@
+
+version 0.02: Fri Jun  8 17:14:26 CEST 2007
+	- Added t/00run.t to MANIFEST to stop complaints from
+	  the (automatic) distribution testers.
+	- added t/pod.t
+	- adapted to oodist
+
+version 0.01: Mon Oct 27 10:22:29 CET 2003
+	- Initial version of code and documentation.

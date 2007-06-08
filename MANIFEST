@@ -2,3 +2,5 @@ ChangeLog
 MANIFEST
 Makefile.PL
 lib/OODoc/Template.pm
+t/00run.t
+t/pod.t
