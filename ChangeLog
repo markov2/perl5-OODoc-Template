@@ -1,4 +1,6 @@
 
+version 0.03:
+
 version 0.02: Fri Jun  8 17:14:26 CEST 2007
 	- Added t/00run.t to MANIFEST to stop complaints from
 	  the (automatic) distribution testers.
