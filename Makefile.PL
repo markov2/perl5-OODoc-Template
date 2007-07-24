@@ -4,13 +4,14 @@ require 5.006_001;
 
 WriteMakefile
  ( NAME	      => 'OODoc::Template'
- , VERSION    => 0.03
+ , VERSION    => 0.10
  , AUTHOR     => 'Mark Overmeer'
  , ABSTRACT   => 'Simple template system'
  , PREREQ_PM  =>
     { Test::More   => 0.47
     , Test::Pod    => 1.00
     }
+ , LICENSE    => 'perl'
  );
 
 sub MY::postamble { <<'__POSTAMBLE' }
