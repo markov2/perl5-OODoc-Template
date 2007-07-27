@@ -1,5 +1,20 @@
 
-version 0.10:
+=== version history of OODoc::Template
+
+version 0.11:
+	Changes:
+	- own code refs must pass back $attrs, $then, and $else
+
+	Improvements:
+	- test process() in VOID context via IO::Scalar, if IO::Scalar is installed
+	- skip test which uses open to ref-scalar when Perl < 5.8.0
+	- be more solid in handling missing data
+	- alternative (default) for missing template file
+	- added example for template file/alt
+	- produce error when part of attributes are not understood
+	- avoid need for quotes when a variable is part of an attribute value
+
+version 0.10: Tue Jul 24 23:39:55 CEST 2007
 	- Everything changed, except the concept.
 	- real tests!
 

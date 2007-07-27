@@ -17,7 +17,7 @@ isa_ok($t, 'OODoc::Template');
 ## true as array of hashes
 #
 
-is(do_process($t, <<'__TEST', true => [{}]), <<'__SHOW');
+is(do_process($t, <<'__TEST', true => [{}]), <<'__SHOW', 'true ARRAY of HASH');
 <!--{true}-->yes<!--{/true}-->
 __TEST
 yes
@@ -45,7 +45,7 @@ __SHOW
 ## true as single hash
 #
 
-is(do_process($t, <<'__TEST', true => {}), <<'__SHOW');
+is(do_process($t, <<'__TEST', true => {}), <<'__SHOW', 'true single HASH');
 <!--{true}-->yes<!--{/true}-->
 __TEST
 yes
@@ -67,7 +67,7 @@ __SHOW
 ## false as empty array
 #
 
-is(do_process($t, <<'__TEST', false => []), <<'__SHOW');
+is(do_process($t, <<'__TEST', false => []), <<'__SHOW', 'false empty ARRAY');
 <!--{false}-->yes<!--{/false}-->
 __TEST
 
@@ -89,7 +89,7 @@ __SHOW
 ## false as undef
 #
 
-is(do_process($t, <<'__TEST', false => undef), <<'__SHOW');
+is(do_process($t, <<'__TEST', false => undef), <<'__SHOW', 'false via undef');
 <!--{false}-->yes<!--{/false}-->
 __TEST
 
@@ -111,7 +111,7 @@ __SHOW
 ## false as undefined
 #
 
-is(do_process($t, <<'__TEST'), <<'__SHOW');
+is(do_process($t, <<'__TEST'), <<'__SHOW', 'false as non-existing');
 <!--{false}-->yes<!--{/false}-->
 __TEST
 

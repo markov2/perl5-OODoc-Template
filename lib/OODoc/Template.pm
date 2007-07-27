@@ -12,7 +12,7 @@ my @default_markers = ('<!--{', '}-->', '<!--{/', '}-->');
 
 OODoc::Template - Simple template system
 
-=chapter SYNOPSYS
+=chapter SYNOPSIS
 
  use OODoc::Template;
  my $t = OODoc::Template->new;
@@ -87,7 +87,7 @@ sub init($)
     $args->{macro}    ||= sub { $self->defineMacro(@_) };
     $args->{search}   ||= '.';
     $args->{markers}  ||= \@default_markers;
-    $args->{define}   ||= sub { +{} };
+    $args->{define}   ||= sub { shift; (+{}, @_) };
 
     $self->pushValues($args);
     $self;
@@ -111,6 +111,9 @@ sub process($)
       : ref $templ eq 'ARRAY'  ? $templ
       :                          $self->parseTemplate("$templ");
 
+    defined $tree
+        or return ();
+
     $self->pushValues($values) if keys %$values;
 
     my @output;
@@ -125,12 +128,15 @@ sub process($)
         my %attrs;
         while(my($k, $v) = each %$attr)
         {   $attrs{$k} = ref $v ne 'ARRAY' ? $v
+              : @$v==1 ? scalar $self->valueFor(@{$v->[0]})
               : join '',
                    map {ref $_ eq 'ARRAY' ? scalar $self->valueFor(@$_) : $_}
                       @$v;
         }
 
-        my $value = $self->valueFor($tag, \%attrs, $then, $else);
+        (my $value, my $attrs, $then, $else)
+           = $self->valueFor($tag, \%attrs, $then, $else);
+
         unless(defined $then || defined $else)
         {   push @output, $value if defined $value;
             next;
@@ -144,7 +150,7 @@ sub process($)
         defined $container
             or next;
 
-        $self->pushValues(\%attrs) if keys %attrs;
+        $self->pushValues($attrs) if keys %$attrs;
 
         if($take_else)
         {    my ($nest_out, $nest_tree) = $self->process($container);
@@ -163,9 +169,10 @@ sub process($)
                  $node->[2] = $nest_tree;
              }
         }
+        elsif(!defined $value) { }
         else { die "only HASH or ARRAY values can control a loop ($tag)\n" }
 
-        $self->popValues if keys %attrs;
+        $self->popValues if keys %$attrs;
     }
     
     $self->popValues if keys %$values;
@@ -180,6 +187,10 @@ Process the content of the file with specified FILENAME.  The current
 value of the C<search> path is used as path to find it.  The returns
 behaves the same as M<process()>.
 
+If the FILENAME is not found, then C<undef> is returned as output.
+However, then this method is used in VOID context, there is no output:
+then an error is raised in stead.
+
 The result of parsing is cached, so there is no need for optimization:
 call this method as often as you want without serious penalty.
 =cut
@@ -190,17 +201,24 @@ sub processFile($;@)
     my $values = @_==1 ? shift : {@_};
     $values->{source} ||= $filename;
 
-    my $template;
-    if(exists $self->{cached}{$filename})
-    {   $template = $self->{cached}{$filename}
-            or return ();
+    my $cache  = $self->{cached};
+
+    my ($output, $tree, $template);
+    if(exists $cache->{$filename})
+    {   $tree   = $cache->{$filename};
+        $output = $self->process($tree, $values)
+            if defined $tree;
+    }
+    elsif($template = $self->loadFile($filename))
+    {   ($output, $tree) = $self->process($template, $values);
+        $cache->{$filename} = $tree;
     }
     else
-    {   $template = $self->loadFile($filename);
+    {   $tree = $cache->{$filename} = undef;
     }
 
-    my ($output, $tree) = $self->process($template, $values);
-    $self->{cached}{$filename} = $tree;
+    defined $tree || defined wantarray
+        or die "ERROR: cannot find template file '$filename'";
 
               wantarray ? ($output, $tree)  # LIST context
     : defined wantarray ? $output           # SCALAR context
@@ -245,8 +263,7 @@ sub valueFor($;$$$)
 #warn "Looking for $tag";
 #warn Dumper $self->{values};
     for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
-    {   
-        my $v = $set->{$tag};
+    {   my $v = $set->{$tag};
 
         if(defined $v)
         {   # HASH  defines container
@@ -261,6 +278,9 @@ sub valueFor($;$$$)
                  : ($v->($tag, $attrs, $then, $else))[0]
         }
 
+        return wantarray ? (undef, $attrs, $then, $else) : undef
+            if exists $set->{$tag};
+
         my $code = $set->{DYNAMIC};
         if(defined $code)
         {   my ($value, @other) = $code->($tag, $attrs, $then, $else);
@@ -270,7 +290,7 @@ sub valueFor($;$$$)
         }
     }
 
-    ();
+    wantarray ? (undef, $attrs, $then, $else) : undef;
 }
 
 =method allValuesFor TAG, [ATTRIBUTES, THEN, ELSE]
@@ -309,7 +329,7 @@ sub pushValues($)
 
     if(my $markers = $attrs->{markers})
     {   my @markers = ref $markers eq 'ARRAY' ? @$markers
-         : map {s/\\\,//g; $_} split /(?!<\\)\,\s*/, $markers;
+          : map {s/\\\,//g; $_} split /(?!<\\)\,\s*/, $markers;
 
         push @markers, $markers[0] . '/'
             if @markers==2;
@@ -349,7 +369,14 @@ sub includeTemplate($$$)
         and die "ERROR: template is not a container";
 
     if(my $fn = $attrs->{file})
-    {   return (scalar $self->processFile($fn, $attrs));
+    {   my $output = $self->processFile($fn,  $attrs);
+        $output    = $self->processFile($attrs->{alt}, $attrs)
+            if !defined $output && $attrs->{alt};
+
+        defined $output
+            or die "ERROR: cannot find template file '$fn'\n";
+
+        return ($output);
     }
 
     if(my $name = $attrs->{macro})
@@ -364,7 +391,8 @@ sub includeTemplate($$$)
 }
 
 =method loadFile FILENAME
-Returns a string containing the whole contents of the file.
+Returns a string containing the whole contents of the file, or C<undef> if the file
+was not found.
 =cut
 
 sub loadFile($)
@@ -385,10 +413,8 @@ sub loadFile($)
         }
     }
 
-    unless(defined $absfn)
-    {   my $source = $self->valueFor('source') || '??';
-        die "ERROR: Cannot find template $relfn in $source\n";
-    }
+    defined $absfn
+        or return undef;
 
     my $in = IO::File->new($absfn, 'r');
     unless(defined $in)
@@ -418,7 +444,8 @@ needs to be called with the correct values.
 sub parseTemplate($)
 {   my ($self, $template) = @_;
 
-    my @frags;
+    defined $template
+        or return undef;
 
     my $markers = $self->valueFor('markers');
 
@@ -426,6 +453,8 @@ sub parseTemplate($)
     $template =~ s! \\ (?: \s* (?: \\ \s*)? \n)+
                     (?: \s* (?= $markers->[0] | $markers->[3] ))?
                   !!mgx;
+
+    my @frags;
 
     # NOT_$tag supported for backwards compat
     while( $template =~ s!^(.*?)        # text before container
@@ -488,17 +517,16 @@ sub parseAttrs($)
 
     my %attrs;
     while( $string =~
-        s/^\s*(\w+)                     # attribute name
-           \s* (?: \=\>? \s*            # optional a value
+        s!^\s* (\w+)                # attribute name
+           \s* (?: \= \>? \s*       # an optional value
                    ( \"[^"]*\"          # dquoted value
                    | \'[^']*\'          # squoted value
                    | \$\{ [^}]+ \}      # complex variable
-                   | \$\w+              # simple variable
                    | [^\s,]+            # unquoted value
                    )
                 )?
-                \s* \,?                 # optionally separated by commas
-          //xs)
+                \s* \,?             # optionally separated by commas
+         !!xs)
     {   my ($k, $v) = ($1, $2);
         unless(defined $v)
         {  $attrs{$k} = 1;
@@ -528,12 +556,15 @@ sub parseAttrs($)
             {   push @steps, [ $1, $self->parseAttrs($2) ];
             }
             else
-            {   push @steps, $_;
+            {   push @steps, $_ if length $_;
             }
         }
 
         $attrs{$k} = \@steps;
     }
+
+    die "ERROR: attribute error in '$_[1]'\n"
+        if length $string;
 
     \%attrs;
 }
@@ -835,6 +866,10 @@ Insert some template.  The tag requires either a C<file> or a C<macro>
 attribute. The filename must be absolute or relative to one of the
 searched directories.  The macro is the name of a pre-declared macro
 block.
+
+Then the C<file> cannot be found (for instance, when the path name
+contains a language component but that template has not yet be
+translated), then the C<alt> (alternative) is attempted if available.
 =back
 
 =example change the markers locally
@@ -853,6 +888,10 @@ A macro is used to define a piece of template, but apply it later.
  <!--{/macro}-->
 
  <!--{template macro="chapter" title="hi there!"}-->
+
+=example use of template file
+
+ <!--{template file=$lang/header.txt alt=en/header.txt}->
 
 =section White-space removal
 

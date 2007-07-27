@@ -4,7 +4,7 @@ require 5.006_001;
 
 WriteMakefile
  ( NAME	      => 'OODoc::Template'
- , VERSION    => 0.10
+ , VERSION    => 0.11
  , AUTHOR     => 'Mark Overmeer'
  , ABSTRACT   => 'Simple template system'
  , PREREQ_PM  =>

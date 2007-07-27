@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use lib 'lib', '../lib', 't';
-use Test::More tests => 82;
+use Test::More tests => 78;
 
 use OODoc::Template;
 use Tools;
@@ -87,11 +87,6 @@ __SHOW
 is(do_process($t, '<!--{show a => $c, b => ${c}}-->'), <<__SHOW);
 'a' => '10'
 'b' => '10'
-__SHOW
-
-# calculated value cannot be used as key
-is(do_process($t, '<!--{show a => $c, $c}-->'), <<__SHOW);
-'a' => '10'
 __SHOW
 
 is(do_process($t, '<!--{show a => ${show d}}-->'), <<__SHOW);

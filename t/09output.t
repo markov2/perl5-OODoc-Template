@@ -4,9 +4,12 @@ use warnings;
 use strict;
 
 use lib 'lib', '../lib', 't';
-use Test::More tests => 19;
+use Test::More tests => 21;
 
 use OODoc::Template;
+
+eval "require 5.8.0";
+my $old_perl = $@;
 
 my $t = OODoc::Template->new;
 ok(defined $t, 'create object');
@@ -57,12 +60,41 @@ is($scalar2, $plain);
 ## VOID context
 #
 
-my $out = '';
-open OUT, '>', \$out or die $!;
-my $old = select OUT;
+eval "require IO::Scalar";
+if($@)
+{   # I do not want to put IO::Scalar in the pre-requisits
+    ok(1, "IO::Scalar not installed");
+    ok(1, 'skip');
+}
+else
+{   my $out = '';
+    my $fh  = IO::Scalar->new(\$out);
+    my $old = select $fh;
 
-$t->process($plain);
+    $t->process($plain);
 
-select $old;
-ok(defined $out, 'VOID context');
-is($out, $plain);
+    $fh->close;
+    select $old;
+
+    ok(defined $out, 'VOID context via IO::Scalar');
+    is($out, $plain);
+}
+
+if($old_perl)
+{   ok(1, "open SCALAR not supported in Perl $]");
+    ok(1, 'skip');
+}
+else
+{
+    my $out = '';
+    open OUT, '>', \$out or die $!;
+    my $old = select OUT;
+
+    $t->process($plain);
+
+    close OUT;
+    select $old;
+
+    ok(defined $out, 'VOID context via open SCALAR');
+    is($out, $plain);
+}

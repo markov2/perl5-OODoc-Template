@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use lib 'lib', '../lib', 't';
-use Test::More tests => 10;
+use Test::More tests => 14;
 
 use OODoc::Template;
 use Tools;
@@ -17,7 +17,7 @@ is(do_process($t, <<'__TEST'), <<'__SHOW');
 <!--{define a => 'monkey'}-->\
    <!--{template file => 'nl/demo.tpl'}-->\
 <!--{/define}-->
-<!--{template file => 'nl/demo.tpl', a => 'donkey'}-->
+<!--{template file=nl/demo.tpl, a => 'donkey'}-->
 <!--{template file => 'nl/demo.tpl'}-->
 __TEST
 This is the demo template
@@ -36,4 +36,11 @@ is(do_process($t, <<'__TEST', lang => 'nl'), <<'__SHOW');
 __TEST
 This is the demo template
 Fill in: dutch
+__SHOW
+
+is(do_process($t, <<'__TEST', lang => 'nl'), <<'__SHOW');
+<!--{template file=missing alt=$lang/demo.tpl a=french}-->\
+__TEST
+This is the demo template
+Fill in: french
 __SHOW
