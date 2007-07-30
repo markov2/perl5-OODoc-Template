@@ -5,8 +5,9 @@ lib/OODoc/Template.pm
 t/00run.t
 t/09output.t
 t/10simple.t
-t/11attr.t
-t/12cond.t
+t/11complex.t
+t/18attr.t
+t/19cond.t
 t/20whitespace.t
 t/21markers.t
 t/22macro.t

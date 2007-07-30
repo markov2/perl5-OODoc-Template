@@ -34,8 +34,14 @@ OODoc::Template - Simple template system
 
 =chapter DESCRIPTION
 
-The OODoc::Template module is a light-weight but powerful template
-system, only implementing the minimal needs for such system.
+The C<OODoc::Template module> is a light-weight but powerful template
+system, only providing display needs for applications, not behavior.
+Let's start with a promise: this module will never grow into a new
+programming language, as all the other template systems did over time.
+
+More examples are needed to explain how to use the module.  You may
+take a look at the source of M<OODoc::Format::Pod3>, although that
+example is not using many features (yet).
 
 =section Short introduction
 
@@ -45,14 +51,14 @@ get a rapid overview on the features implemented by this module.
 =over 4
 
 =item .
-all values which are to be filled in are either passed in when the
-template is used, or defined within the template files themselves:
-there are no dirty tricks played with name-spaces.
+all values which are to be filled in are either passed-in when the
+template is used, or defined within the template files themselves: there
+are no dirty tricks played with name-spaces or such to collect the data.
 
 =item .
-only the if-then-else construct is defined: programming and text
-templates concepts should not be merged, simply because that is awful.
-Programming should be left to programming languages.
+only the if(data available)-then-else construct is defined: programming
+and text templates concepts should not be merged, simply because that
+is awful.  Programming should be left to programming languages.
 
 =item .
 the templates are compiled, so a second run within the same program
@@ -87,7 +93,7 @@ sub init($)
     $args->{macro}    ||= sub { $self->defineMacro(@_) };
     $args->{search}   ||= '.';
     $args->{markers}  ||= \@default_markers;
-    $args->{define}   ||= sub { shift; (+{}, @_) };
+    $args->{define}   ||= sub { shift; (1, @_) };
 
     $self->pushValues($args);
     $self;
@@ -138,7 +144,13 @@ sub process($)
            = $self->valueFor($tag, \%attrs, $then, $else);
 
         unless(defined $then || defined $else)
-        {   push @output, $value if defined $value;
+        {   defined $value
+                or next;
+
+            die "ERROR: value for $tag is $value, must be single\n"
+                if ref $value eq 'ARRAY' || ref $value eq 'HASH';
+
+            push @output, $value;
             next;
         }
 
@@ -169,8 +181,11 @@ sub process($)
                  $node->[2] = $nest_tree;
              }
         }
-        elsif(!defined $value) { }
-        else { die "only HASH or ARRAY values can control a loop ($tag)\n" }
+        else
+        {    my ($nest_out, $nest_tree) = $self->process($container);
+             push @output, $nest_out;
+             $node->[2] = $nest_tree;
+        }
 
         $self->popValues if keys %$attrs;
     }
@@ -478,13 +493,6 @@ sub parseTemplate($)
                          !!xs)
         {   $then       = $1;
             my $endline = $2;
-
-            if($then =~ m/$markers->[0] \s* $tag\b /xs)
-            {   # oops: container is terminated for a brother (nesting
-                # is not possible). Correct for the greedyness.
-                $template = $then.$endline.$template;
-                $then     = undef;
-            }
         }
 
         if($not) { ($then, $else) = (undef, $then) }

@@ -20,7 +20,7 @@ isa_ok($t, 'OODoc::Template');
 
 my $plain = "This has no tags.";
 
-is(do_process($t, $plain), $plain);
+is(do_process($t, $plain), $plain, 'plain');
 
 is(do_process($t, $plain, a => 42), $plain);
 
@@ -34,7 +34,7 @@ is(do_process($t, $plain, {a => 42}), $plain);
 
 my $var = "it is <!--{a}-->, you see";
 
-is(do_process($t, $var), 'it is , you see');
+is(do_process($t, $var), 'it is , you see', 'var');
 
 is(do_process($t, $var, a => 42), 'it is 42, you see');
 
@@ -47,11 +47,12 @@ my $var2 = "a=<!--{a}-->, b=<!--{b}--> , a=<!--{
 	   a
 }-->, c = <!--{c}-->;";
 
-is(do_process($t, $var2), 'a=, b= , a=, c = ;');
+is(do_process($t, $var2), 'a=, b= , a=, c = ;', 'var2 all empty');
 
 is(do_process($t, $var2, a => 42), 'a=42, b= , a=42, c = ;');
 
-is(do_process($t, $var2, {a => 42, b => 10, c => 6}), 'a=42, b=10 , a=42, c = 6;');
+is(do_process($t, $var2, {a => 42, b => 10, c => 6})
+     , 'a=42, b=10 , a=42, c = 6;', 'var2 all used');
 
 #
 ## Nesting
@@ -65,7 +66,7 @@ X
 <!--{/a}-->Z
 __NEST
 
-is(do_process($t, $nest, a => [], b => 2), <<__N);
+is(do_process($t, $nest, a => [], b => 2), <<__N, 'nesting');
 X
 Z
 __N
@@ -89,7 +90,7 @@ X
 __REP
 
 
-is(do_process($t, $rep), <<__R);
+is(do_process($t, $rep), <<__R, 'repeat');
 X
 
 __R

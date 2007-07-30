@@ -1,10 +1,10 @@
 use ExtUtils::MakeMaker;
 
-require 5.006_001;
+require 5.006;
 
 WriteMakefile
  ( NAME	      => 'OODoc::Template'
- , VERSION    => 0.11
+ , VERSION    => 0.12
  , AUTHOR     => 'Mark Overmeer'
  , ABSTRACT   => 'Simple template system'
  , PREREQ_PM  =>

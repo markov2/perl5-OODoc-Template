@@ -1,12 +1,25 @@
 
 === version history of OODoc::Template
 
-version 0.11:
+version 0.12: Mon Jul 30 08:50:47 CEST 2007
+	Changes:
+	- the terminating /a in <!--{a}-->B<!--{a}-->C<!--{/a}-->
+	  now closes the first a, was the second.
+
+	Improvements:
+	- <!--{a}-->xx<!--{/a}--> was not permitted if a was a
+	  value (before, only ARRAY and HASH were permitted to control
+	  a container).  Now, a defined value with enable the block.
+	- report error when HASH or ARRAY are used where single value
+	  is needed.
+
+version 0.11: Fri Jul 27 11:32:08 CEST 2007
 	Changes:
 	- own code refs must pass back $attrs, $then, and $else
 
 	Improvements:
-	- test process() in VOID context via IO::Scalar, if IO::Scalar is installed
+	- test process() in VOID context via IO::Scalar, if IO::Scalar
+	  is installed
 	- skip test which uses open to ref-scalar when Perl < 5.8.0
 	- be more solid in handling missing data
 	- alternative (default) for missing template file
