@@ -39,9 +39,8 @@ system, only providing display needs for applications, not behavior.
 Let's start with a promise: this module will never grow into a new
 programming language, as all the other template systems did over time.
 
-More examples are needed to explain how to use the module.  You may
-take a look at the source of M<OODoc::Format::Pod3>, although that
-example is not using many features (yet).
+There are at least a zillion comparible modules on CPAN, but this
+one is mine ;-)
 
 =section Short introduction
 
@@ -120,7 +119,8 @@ sub process($)
     defined $tree
         or return ();
 
-    $self->pushValues($values) if keys %$values;
+    $self->pushValues($values)
+        if keys %$values;
 
     my @output;
     foreach my $node (@$tree)
@@ -247,7 +247,7 @@ sub processFile($;@)
 
 sub defineMacro($$$$)
 {   my ($self, $tag, $attrs, $then, $else) = @_;
-    my $name = $attrs->{name}
+    my $name = delete $attrs->{name}
         or die "ERROR: macro requires a name\n";
 
     defined $else
@@ -266,10 +266,10 @@ sub defineMacro($$$$)
 }
 
 =method valueFor TAG, [ATTRIBUTES, THEN, ELSE]
-Lookup the value for TAG in the known data.  See L</Values> about the
-way this is done.  The ATTRIBUTES (HASH of key-value pairs) and THEN/ELSE
-content text references are used when the TAG relates to a code reference
-which is to produce new values dynamicly.
+Lookup the value for TAG in the known data.  See section L</values>
+about the way this is done.  The ATTRIBUTES (HASH of key-value pairs)
+and THEN/ELSE content text references are used when the TAG relates to
+a code reference which is to produce new values dynamicly.
 =cut
 
 sub valueFor($;$$$)

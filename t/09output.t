@@ -8,7 +8,7 @@ use Test::More tests => 21;
 
 use OODoc::Template;
 
-eval "require 5.8.0";
+eval "require 5.008001";
 my $old_perl = $@;
 
 my $t = OODoc::Template->new;
