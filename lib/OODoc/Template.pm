@@ -406,8 +406,8 @@ sub includeTemplate($$$)
 }
 
 =method loadFile FILENAME
-Returns a string containing the whole contents of the file, or C<undef> if the file
-was not found.
+Returns a string containing the whole contents of the file, or C<undef>
+if the file was not found.
 =cut
 
 sub loadFile($)
@@ -476,7 +476,7 @@ sub parseTemplate($)
                            $markers->[0] \s*
                            (?: IF \s* )?
                            (NOT (?:_|\s+) )?
-                           (\w+) \s*    # tag
+                           ([\w.-]+) \s*    # tag
                            (.*?) \s*    # attributes
                            $markers->[1]
                          !!xs
@@ -487,7 +487,7 @@ sub parseTemplate($)
 
         if($template =~ s! (.*?)           # contained
                            ( $markers->[2]
-                             \s* $tag \s*  # "our" tag
+                             \s* \Q$tag\E \s*  # "our" tag
                              $markers->[3]
                            )
                          !!xs)
@@ -499,7 +499,7 @@ sub parseTemplate($)
         elsif(!defined $then) { }
         elsif($then =~ s! $markers->[0]
                           \s* ELSE (?:_|\s+)
-                          $tag \s*
+                          \Q$tag\E \s*
                           $markers->[1]
                           (.*)
                         !!xs)

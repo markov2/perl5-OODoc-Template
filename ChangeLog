@@ -1,6 +1,11 @@
 
 === version history of OODoc::Template
 
+version 0.14: Mon Oct 20 09:38:36 CEST 2008
+
+	Improvements:
+	- accept dots and dashes in tags (macro names and variables)
+
 version 0.13: Mon Feb  4 22:24:18 CET 2008
 
 	Changes:
