@@ -3,8 +3,10 @@ use warnings;
 
 package OODoc::Template;
 
-use IO::File   ();
+use IO::File     ();
 use Data::Dumper;
+use Scalar::Util 'weaken';
+use File::Spec   ();
 
 my @default_markers = ('<!--{', '}-->', '<!--{/', '}-->');
 
@@ -49,17 +51,17 @@ get a rapid overview on the features implemented by this module.
 
 =over 4
 
-=item .
+=item
 all values which are to be filled in are either passed-in when the
 template is used, or defined within the template files themselves: there
 are no dirty tricks played with name-spaces or such to collect the data.
 
-=item .
+=item
 only the if(data available)-then-else construct is defined: programming
 and text templates concepts should not be merged, simply because that
 is awful.  Programming should be left to programming languages.
 
-=item .
+=item
 the templates are compiled, so a second run within the same program
 will be very fast.
 
@@ -88,8 +90,10 @@ sub init($)
     $self->{cached}     = {};
     $self->{macros}     = {};
 
-    $args->{template} ||= sub { $self->includeTemplate(@_) };
-    $args->{macro}    ||= sub { $self->defineMacro(@_) };
+    my $s = $self; weaken $s;   # avoid circular ref
+    $args->{template} ||= sub { $s->includeTemplate(@_) };
+    $args->{macro}    ||= sub { $s->defineMacro(@_) };
+
     $args->{search}   ||= '.';
     $args->{markers}  ||= \@default_markers;
     $args->{define}   ||= sub { shift; (1, @_) };
@@ -384,7 +388,7 @@ sub includeTemplate($$$)
         and die "ERROR: template is not a container";
 
     if(my $fn = $attrs->{file})
-    {   my $output = $self->processFile($fn,  $attrs);
+    {   my $output = $self->processFile($fn, $attrs);
         $output    = $self->processFile($attrs->{alt}, $attrs)
             if !defined $output && $attrs->{alt};
 

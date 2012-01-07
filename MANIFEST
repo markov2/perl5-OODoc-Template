@@ -12,6 +12,6 @@ t/20whitespace.t
 t/21markers.t
 t/22macro.t
 t/23file.t
+t/99pod.t
 t/Tools.pm
 t/nl/demo.tpl
-t/pod.t

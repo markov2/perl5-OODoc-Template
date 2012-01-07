@@ -1,6 +1,16 @@
 
 === version history of OODoc::Template
 
+version 0.15: Sun Jan  8 00:42:22 CET 2012
+
+	Improvements:
+	- do not run t/pod.t in devel environment.
+
+	Fixes:
+	- fix memory leak in object creation.
+	- missing "use File::Spec" in ::Template
+	  rt.cpan.org #73810 [Andreas Koenig]
+
 version 0.14: Mon Oct 20 09:38:36 CEST 2008
 
 	Improvements:
