@@ -3,10 +3,12 @@ use warnings;
 
 package OODoc::Template;
 
+use Log::Report  'oodoc-template';
+
 use IO::File     ();
-use Data::Dumper;
-use Scalar::Util 'weaken';
 use File::Spec   ();
+use Data::Dumper qw(Dumper);
+use Scalar::Util qw(weaken);
 
 my @default_markers = ('<!--{', '}-->', '<!--{/', '}-->');
 
@@ -151,8 +153,9 @@ sub process($)
         {   defined $value
                 or next;
 
-            die "ERROR: value for $tag is $value, must be single\n"
-                if ref $value eq 'ARRAY' || ref $value eq 'HASH';
+            ref $value ne 'ARRAY' && ref $value ne 'HASH'
+                or error __x"value for {tag} is {value}, must be single"
+                     , tag => $tag, value => $value;
 
             push @output, $value;
             next;
@@ -237,7 +240,7 @@ sub processFile($;@)
     }
 
     defined $tree || defined wantarray
-        or die "ERROR: cannot find template file '$filename'";
+        or error __x"cannot find template file {fn}", fn => $filename;
 
               wantarray ? ($output, $tree)  # LIST context
     : defined wantarray ? $output           # SCALAR context
@@ -252,10 +255,10 @@ sub processFile($;@)
 sub defineMacro($$$$)
 {   my ($self, $tag, $attrs, $then, $else) = @_;
     my $name = delete $attrs->{name}
-        or die "ERROR: macro requires a name\n";
+        or error __x"macro requires a name";
 
     defined $else
-        and die "ERROR: macros cannot have an else part ($name)\n";
+        and error __x"macros cannot have an else part ({macro})",macro => $name;
 
     my %attrs = %$attrs;   # for closure
     $attrs{markers} = $self->valueFor('markers');
@@ -385,7 +388,7 @@ sub includeTemplate($$$)
 {   my ($self, $tag, $attrs, $then, $else) = @_;
 
     defined $then || defined $else
-        and die "ERROR: template is not a container";
+        and error __x"template is not a container";
 
     if(my $fn = $attrs->{file})
     {   my $output = $self->processFile($fn, $attrs);
@@ -393,20 +396,20 @@ sub includeTemplate($$$)
             if !defined $output && $attrs->{alt};
 
         defined $output
-            or die "ERROR: cannot find template file '$fn'\n";
+            or error __x"cannot find template file {fn}", fn => $fn;
 
         return ($output);
     }
 
     if(my $name = $attrs->{macro})
     {    my $macro = $self->{macros}{$name}
-            or die "ERROR: cannot find macro $name";
+            or error __x"cannot find macro {name}", name => $name;
 
         return $macro->($tag, $attrs, $then, $else);
     }
 
-    my $source = $self->valueFor('source') || '??';
-    die "ERROR: file or macro attribute required for template in $source\n";
+    error __x"file or macro attribute required for template in {source}"
+      , source => $self->valueFor('source') || '??';
 }
 
 =method loadFile FILENAME
@@ -438,7 +441,7 @@ sub loadFile($)
     my $in = IO::File->new($absfn, 'r');
     unless(defined $in)
     {   my $source = $self->valueFor('source') || '??';
-        die "ERROR: Cannot read from $absfn in $source: $!";
+        fault __x"Cannot read from {fn} in {file}", fn => $absfn, file=>$source;
     }
 
     \(join '', $in->getlines);  # auto-close in
@@ -529,7 +532,10 @@ sub parseAttrs($)
 
     my %attrs;
     while( $string =~
-        s!^\s* (\w+)                # attribute name
+        s!^\s* (?: '([^']+)'        # attribute name (might be quoted)
+               |   "([^"]+)"
+               |   (\w+)
+               )
            \s* (?: \= \>? \s*       # an optional value
                    ( \"[^"]*\"          # dquoted value
                    | \'[^']*\'          # squoted value
@@ -539,7 +545,7 @@ sub parseAttrs($)
                 )?
                 \s* \,?             # optionally separated by commas
          !!xs)
-    {   my ($k, $v) = ($1, $2);
+    {   my ($k, $v) = ($1||$2||$3, $4);
         unless(defined $v)
         {  $attrs{$k} = 1;
            next;
@@ -575,7 +581,7 @@ sub parseAttrs($)
         $attrs{$k} = \@steps;
     }
 
-    die "ERROR: attribute error in '$_[1]'\n"
+    error __x"attribute error in {tag}'", tag => $_[1]
         if length $string;
 
     \%attrs;

@@ -1,6 +1,11 @@
 
 === version history of OODoc::Template
 
+version 0.16: Fri Jan 11 10:00:05 CET 2013
+	Improvements:
+	- use Log::Report for errors
+	- attributes can be quoted with '' and "" to permit \W
+
 version 0.15: Sun Jan  8 00:42:22 CET 2012
 
 	Improvements:

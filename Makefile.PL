@@ -4,12 +4,13 @@ require 5.006;
 
 WriteMakefile
  ( NAME	      => 'OODoc::Template'
- , VERSION    => 0.15
+ , VERSION    => 0.16
  , AUTHOR     => 'Mark Overmeer'
  , ABSTRACT   => 'Simple template system'
  , PREREQ_PM  =>
     { Test::More   => 0.47
     , Test::Pod    => 1.00
+    , Log::Report  => 0.992
     }
  , LICENSE    => 'perl'
  );
