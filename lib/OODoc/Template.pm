@@ -1,3 +1,6 @@
+# This code is part of perl distribution OODoc-Template.  It is licensed under
+# the same terms as Perl itself: https://spdx.org/licenses/Artistic-2.0.html
+
 use strict;
 use warnings;
 
@@ -581,7 +584,7 @@ sub parseAttrs($)
         $attrs{$k} = \@steps;
     }
 
-    error __x"attribute error in {tag}'", tag => $_[1]
+    error __x"attribute error in '{tag}'", tag => $_[1]
         if length $string;
 
     \%attrs;
