@@ -3,6 +3,9 @@
 
 version 0.18:
 
+	Changes:
+	- load files with utf-8, always
+
 version 0.17: Wed  8 Dec 13:25:11 CET 2021
 
 	Improvements:

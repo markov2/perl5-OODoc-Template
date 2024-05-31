@@ -441,7 +441,7 @@ sub loadFile($)
     defined $absfn
         or return undef;
 
-    my $in = IO::File->new($absfn, 'r');
+    my $in = IO::File->new($absfn, '<:encoding(utf-8)');
     unless(defined $in)
     {   my $source = $self->valueFor('source') || '??';
         fault __x"Cannot read from {fn} in {file}", fn => $absfn, file=>$source;
