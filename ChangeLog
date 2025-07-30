@@ -5,6 +5,11 @@ version 0.18:
 
 	Changes:
 	- load files with utf-8, always
+	- requires Perl 5.16
+
+	Improvements:
+	- converted to OODoc v3
+	- replace IO::File by open()
 
 version 0.17: Wed  8 Dec 13:25:11 CET 2021
 

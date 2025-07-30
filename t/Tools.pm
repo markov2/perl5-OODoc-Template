@@ -4,7 +4,7 @@ use strict;
 package Tools;
 
 use OODoc::Template;
-use base 'Exporter';
+use parent 'Exporter';
 use Test::More;
 
 our @EXPORT = qw/do_process/;

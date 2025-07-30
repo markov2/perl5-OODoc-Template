@@ -1,17 +1,12 @@
-# This code is part of perl distribution OODoc-Template.  It is licensed under
-# the same terms as Perl itself: https://spdx.org/licenses/Artistic-2.0.html
+package OODoc::Template;
 
 use strict;
 use warnings;
 
-package OODoc::Template;
-
 use Log::Report  'oodoc-template';
 
-use IO::File     ();
-use File::Spec   ();
-use Data::Dumper qw(Dumper);
-use Scalar::Util qw(weaken);
+use File::Spec::Functions qw/file_name_is_absolute canonpath catfile rel2abs/;
+use Scalar::Util          qw(weaken);
 
 my @default_markers = ('<!--{', '}-->', '<!--{/', '}-->');
 
@@ -41,7 +36,7 @@ OODoc::Template - Simple template system
 
 =chapter DESCRIPTION
 
-The C<OODoc::Template module> is a light-weight but powerful template
+This C<OODoc::Template> module is a light-weight but powerful template
 system, only providing display needs for applications, not behavior.
 Let's start with a promise: this module will never grow into a new
 programming language, as all the other template systems did over time.
@@ -76,8 +71,8 @@ will be very fast.
 
 =section Constructors
 
-=c_method new OPTIONS
-Create a new formatter object.  All OPTIONS are used as global set of
+=c_method new %options
+Create a new formatter object.  All %options are used as global set of
 attributes, so used for each template processing started via this
 object.  Probably, it is a good habit to set the required changes
 of the predefined tags (like C<template> and C<search>) here.
@@ -252,7 +247,7 @@ sub processFile($;@)
 
 =section Internal administration
 
-=method defineMacro TAG, ATTRIBUTES, THEN, ELSE
+=method defineMacro $tag, $attrs, $then, $else
 =cut
 
 sub defineMacro($$$$)
@@ -275,18 +270,16 @@ sub defineMacro($$$$)
     
 }
 
-=method valueFor TAG, [ATTRIBUTES, THEN, ELSE]
-Lookup the value for TAG in the known data.  See section L</values>
-about the way this is done.  The ATTRIBUTES (HASH of key-value pairs)
-and THEN/ELSE content text references are used when the TAG relates to
+=method valueFor $tag, [$attrs, $then, $else]
+Lookup the value for $tag in the known data.  See section L</values>
+about the way this is done.  The $attrs (HASH of key-value pairs)
+and $then/$else content text references are used when the $tag relates to
 a code reference which is to produce new values dynamicly.
 =cut
 
 sub valueFor($;$$$)
 {   my ($self, $tag, $attrs, $then, $else) = @_;
 
-#warn "Looking for $tag";
-#warn Dumper $self->{values};
     for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
     {   my $v = $set->{$tag};
 
@@ -318,8 +311,8 @@ sub valueFor($;$$$)
     wantarray ? (undef, $attrs, $then, $else) : undef;
 }
 
-=method allValuesFor TAG, [ATTRIBUTES, THEN, ELSE]
-Collects all values related to TAG in all nestings of values.  The most
+=method allValuesFor $tag, [$attrs, $then, $else]
+Collects all values related to $tag in all nestings of values.  The most
 preferred is listed first.
 =cut
 
@@ -383,7 +376,7 @@ sub popValues()
     $self->{values} = $self->{values}{NEXT};
 }
 
-=method includeTemplate TAG, ATTRIBUTES, THEN, ELSE
+=method includeTemplate $tag, $attrs, $then, $else
 This is the implementation for the C<template> tag.
 =cut
 
@@ -424,15 +417,15 @@ sub loadFile($)
 {   my ($self, $relfn) = @_;
     my $absfn;
 
-    if(File::Spec->file_name_is_absolute($relfn))
-    {   my $fn = File::Spec->canonpath($relfn);
+    if(file_name_is_absolute $relfn)
+    {   my $fn = canonpath $relfn;
         $absfn = $fn if -f $fn;
     }
 
     unless($absfn)
-    {   my @srcs = map { @$_ } $self->allValuesFor('search');
+    {   my @srcs = map @$_, $self->allValuesFor('search');
         foreach my $dir (@srcs)
-        {   $absfn = File::Spec->rel2abs($relfn, $dir);
+        {   $absfn = rel2abs $relfn, $dir;
             last if -f $absfn;
             $absfn = undef;
         }
@@ -441,7 +434,7 @@ sub loadFile($)
     defined $absfn
         or return undef;
 
-    my $in = IO::File->new($absfn, '<:encoding(utf-8)');
+    open my $in, '<:encoding(utf-8)', $absfn;
     unless(defined $in)
     {   my $source = $self->valueFor('source') || '??';
         fault __x"Cannot read from {fn} in {file}", fn => $absfn, file=>$source;
@@ -450,6 +443,7 @@ sub loadFile($)
     \(join '', $in->getlines);  # auto-close in
 }
 
+#---------------
 =section Parsing
 
 =method parse STRING, (HASH|PAIRS)
@@ -468,9 +462,7 @@ needs to be called with the correct values.
 
 sub parseTemplate($)
 {   my ($self, $template) = @_;
-
-    defined $template
-        or return undef;
+    defined $template or return undef;
 
     my $markers = $self->valueFor('markers');
 
@@ -513,7 +505,7 @@ sub parseTemplate($)
                           $markers->[1]
                           (.*)
                         !!xs)
-        {   # ELSE_$tag for backwards compat
+        {   # $else_$tag for backwards compat
             $else = $1;
         }
 
@@ -590,6 +582,7 @@ sub parseAttrs($)
     \%attrs;
 }
 
+#-----------------------
 =chapter DETAILS
 
 This module works as simple as possible: pass a string to M<process()>
