@@ -42,8 +42,6 @@ my %oodist   = (
 		format         => 'pod3',
 		podtail        => undef,
 	  },
-	  # You may add HTML formatters here.
-	  # You may add exporter configurations here.
 	],
 );
 
