@@ -1,3 +1,8 @@
+#oodist: *** DO NOT USE THIS VERSION FOR PRODUCTION ***
+#oodist: This file contains OODoc-style documentation which will get stripped
+#oodist: during its release in the distribution.  You can use this file for
+#oodist: testing, however the code of this development version may be broken!
+
 package OODoc::Template;
 
 use strict;
@@ -6,33 +11,34 @@ use warnings;
 use Log::Report  'oodoc-template';
 
 use File::Spec::Functions qw/file_name_is_absolute canonpath catfile rel2abs/;
-use Scalar::Util          qw(weaken);
+use Scalar::Util          qw/weaken/;
 
 my @default_markers = ('<!--{', '}-->', '<!--{/', '}-->');
 
+#--------------------
 =chapter NAME
 
 OODoc::Template - Simple template system
 
 =chapter SYNOPSIS
 
- use OODoc::Template;
- my $t = OODoc::Template->new;
+  use OODoc::Template;
+  my $t = OODoc::Template->new;
 
- my $template = ".....";  # usually read from file
- my %values   = ( a => 3 );
+  my $template = ".....";  # usually read from file
+  my %values   = ( a => 3 );
 
- # list context keeps parse tree as well
- my ($output, $tree) = $t->process($template, \%values);
+  # list context keeps parse tree as well
+  my ($output, $tree) = $t->process($template, \%values);
 
- # scalar context catches output in string
- my $output = $t->process($template, \%values);
- my $output = $t->process($tree, \%values);
- 
- # void context output to selected file-handle
- select OUTPUT;
- $t->process($template, \%values);
- $t->process($tree, \%values);
+  # scalar context catches output in string
+  my $output = $t->process($template, \%values);
+  my $output = $t->process($tree, \%values);
+
+  # void context output to selected file-handle
+  select OUTPUT;
+  $t->process($template, \%values);
+  $t->process($tree, \%values);
 
 =chapter DESCRIPTION
 
@@ -80,126 +86,126 @@ of the predefined tags (like C<template> and C<search>) here.
 =cut
 
 sub new(@)
-{   my ($class, %args) = @_;
-    (bless {}, $class)->init(\%args);
+{	my ($class, %args) = @_;
+	(bless {}, $class)->init(\%args);
 }
 
 sub init($)
-{   my ($self, $args) = @_;
+{	my ($self, $args) = @_;
 
-    $self->{cached}     = {};
-    $self->{macros}     = {};
+	$self->{cached}     = {};
+	$self->{macros}     = {};
 
-    my $s = $self; weaken $s;   # avoid circular ref
-    $args->{template} ||= sub { $s->includeTemplate(@_) };
-    $args->{macro}    ||= sub { $s->defineMacro(@_) };
+	my $s = $self; weaken $s;   # avoid circular ref
+	$args->{template} ||= sub { $s->includeTemplate(@_) };
+	$args->{macro}    ||= sub { $s->defineMacro(@_) };
 
-    $args->{search}   ||= '.';
-    $args->{markers}  ||= \@default_markers;
-    $args->{define}   ||= sub { shift; (1, @_) };
+	$args->{search}   ||= '.';
+	$args->{markers}  ||= \@default_markers;
+	$args->{define}   ||= sub { shift; (1, @_) };
 
-    $self->pushValues($args);
-    $self;
+	$self->pushValues($args);
+	$self;
 }
 
+#--------------------
 =section Processing
 
-=method process STRING|SCALAR|ARRAY, HASH|PAIRS
-The template is passed as unprocessed SCALAR to the STRING, or
-an already parsed template (which is an ARRAY).  Values are
-passed as a HASH or list of PAIRS.
+=method process STRING|SCALAR|ARRAY, \%params|%params
+The template is rendered inserting the %params.
+
+With a P<STRING> or P<SCALAR> (reference to a string), the template will
+be parsed first with M<parseTemplate()>.  With an P<ARRAY>, this work
+has already been done.
+=cut
+
+=error value for $tag is $value, must be single
 =cut
 
 sub process($)
-{   my ($self, $templ) = (shift, shift);
+{	my ($self, $templ) = (shift, shift);
+	my $values = @_==1 ? shift : +{ @_ };
 
-    my $values = @_==1 ? shift : @_ ? {@_} : {};
+	my $tree     # parse with real copy
+	 = ref $templ eq 'SCALAR' ? $self->parseTemplate($$templ)
+	 : ref $templ eq 'ARRAY'  ? $templ
+	 :                          $self->parseTemplate("$templ");
 
-    my $tree     # parse with real copy
-      = ref $templ eq 'SCALAR' ? $self->parseTemplate($$templ)
-      : ref $templ eq 'ARRAY'  ? $templ
-      :                          $self->parseTemplate("$templ");
+	defined $tree
+		or return ();
 
-    defined $tree
-        or return ();
+	$self->pushValues($values)
+		if keys %$values;
 
-    $self->pushValues($values)
-        if keys %$values;
+	my @output;
+  NODE:
+	foreach my $node (@$tree)
+	{	unless(ref $node)
+		{	push @output, $node;
+			next NODE;
+		}
 
-    my @output;
-    foreach my $node (@$tree)
-    {   unless(ref $node)
-        {   push @output, $node;
-            next;
-        }
-    
-        my ($tag, $attr, $then, $else) = @$node;
+		my ($tag, $attr, $then, $else) = @$node;
 
-        my %attrs;
-        while(my($k, $v) = each %$attr)
-        {   $attrs{$k} = ref $v ne 'ARRAY' ? $v
-              : @$v==1 ? scalar $self->valueFor(@{$v->[0]})
-              : join '',
-                   map {ref $_ eq 'ARRAY' ? scalar $self->valueFor(@$_) : $_}
-                      @$v;
-        }
+		my %attrs;
+		while(my($k, $v) = each %$attr)
+		{	$attrs{$k} = ref $v ne 'ARRAY' ? $v
+			: @$v==1 ? scalar $self->valueFor(@{$v->[0]})
+			: join '', map {ref $_ eq 'ARRAY' ? scalar $self->valueFor(@$_) : $_} @$v;
+		}
 
-        (my $value, my $attrs, $then, $else)
-           = $self->valueFor($tag, \%attrs, $then, $else);
+		(my $value, my $attrs, $then, $else) = $self->valueFor($tag, \%attrs, $then, $else);
 
-        unless(defined $then || defined $else)
-        {   defined $value
-                or next;
+		unless(defined $then || defined $else)
+		{	defined $value or next NODE;
 
-            ref $value ne 'ARRAY' && ref $value ne 'HASH'
-                or error __x"value for {tag} is {value}, must be single"
-                     , tag => $tag, value => $value;
+			ref $value ne 'ARRAY' && ref $value ne 'HASH'
+				or error __x"value for {tag} is {value}, must be single",
+						tag => $tag, value => $value;
 
-            push @output, $value;
-            next;
-        }
+			push @output, $value;
+			next NODE;
+		}
 
-        my $take_else
-           = !defined $value || (ref $value eq 'ARRAY' && @$value==0);
+		my $take_else = !defined $value || (ref $value eq 'ARRAY' && @$value==0);
+		my $container = $take_else ? $else : $then;
 
-        my $container = $take_else ? $else : $then;
+		defined $container
+			or next NODE;
 
-        defined $container
-            or next;
+		$self->pushValues($attrs) if keys %$attrs;
 
-        $self->pushValues($attrs) if keys %$attrs;
+		if($take_else)
+		{	my ($nest_out, $nest_tree) = $self->process($container);
+			push @output, $nest_out;
+			$node->[3] = $nest_tree;
+		}
+		elsif(ref $value eq 'HASH')
+		{	my ($nest_out, $nest_tree) = $self->process($container, $value);
+			push @output, $nest_out;
+			$node->[2] = $nest_tree;
+		}
+		elsif(ref $value eq 'ARRAY')
+		{	foreach my $data (@$value)
+			{	my ($nest_out, $nest_tree) = $self->process($container, $data);
+				push @output, $nest_out;
+				$node->[2] = $nest_tree;
+			}
+		}
+		else
+		{	my ($nest_out, $nest_tree) = $self->process($container);
+			push @output, $nest_out;
+			$node->[2] = $nest_tree;
+		}
 
-        if($take_else)
-        {    my ($nest_out, $nest_tree) = $self->process($container);
-             push @output, $nest_out;
-             $node->[3] = $nest_tree;
-        }
-        elsif(ref $value eq 'HASH')
-        {    my ($nest_out, $nest_tree) = $self->process($container, $value);
-             push @output, $nest_out;
-             $node->[2] = $nest_tree;
-        }
-        elsif(ref $value eq 'ARRAY')
-        {    foreach my $data (@$value)
-             {   my ($nest_out, $nest_tree) = $self->process($container, $data);
-                 push @output, $nest_out;
-                 $node->[2] = $nest_tree;
-             }
-        }
-        else
-        {    my ($nest_out, $nest_tree) = $self->process($container);
-             push @output, $nest_out;
-             $node->[2] = $nest_tree;
-        }
+		$self->popValues if keys %$attrs;
+	}
 
-        $self->popValues if keys %$attrs;
-    }
-    
-    $self->popValues if keys %$values;
+	$self->popValues if keys %$values;
 
-              wantarray ? (join('', @output), $tree)  # LIST context
-    : defined wantarray ? join('', @output)           # SCALAR context
-    :                     print @output;              # VOID context
+	    wantarray         ? (join('', @output), $tree)  # LIST context
+	  : defined wantarray ? join('', @output)           # SCALAR context
+	  :                     print @output;              # VOID context
 }
 
 =method processFile FILENAME, HASH|PAIRS
@@ -207,67 +213,73 @@ Process the content of the file with specified FILENAME.  The current
 value of the C<search> path is used as path to find it.  The returns
 behaves the same as M<process()>.
 
-If the FILENAME is not found, then C<undef> is returned as output.
+If the FILENAME is not found, then undef is returned as output.
 However, then this method is used in VOID context, there is no output:
 then an error is raised in stead.
 
 The result of parsing is cached, so there is no need for optimization:
 call this method as often as you want without serious penalty.
+
+=error cannot find template file $file
 =cut
 
 sub processFile($;@)
-{   my ($self, $filename) = (shift, shift);
+{	my ($self, $filename) = (shift, shift);
 
-    my $values = @_==1 ? shift : {@_};
-    $values->{source} ||= $filename;
+	my $values = @_==1 ? shift : {@_};
+	$values->{source} ||= $filename;
 
-    my $cache  = $self->{cached};
+	my $cache  = $self->{cached};
 
-    my ($output, $tree, $template);
-    if(exists $cache->{$filename})
-    {   $tree   = $cache->{$filename};
-        $output = $self->process($tree, $values)
-            if defined $tree;
-    }
-    elsif($template = $self->loadFile($filename))
-    {   ($output, $tree) = $self->process($template, $values);
-        $cache->{$filename} = $tree;
-    }
-    else
-    {   $tree = $cache->{$filename} = undef;
-    }
+	my ($output, $tree, $template);
+	if(exists $cache->{$filename})
+	{	$tree   = $cache->{$filename};
+		$output = $self->process($tree, $values)
+			if defined $tree;
+	}
+	elsif($template = $self->loadFile($filename))
+	{	($output, $tree) = $self->process($template, $values);
+		$cache->{$filename} = $tree;
+	}
+	else
+	{	$tree = $cache->{$filename} = undef;
+	}
 
-    defined $tree || defined wantarray
-        or error __x"cannot find template file {fn}", fn => $filename;
+	defined $tree || defined wantarray
+		or error __x"cannot find template file {file}", file => $filename;
 
-              wantarray ? ($output, $tree)  # LIST context
-    : defined wantarray ? $output           # SCALAR context
-    :                     print $output;    # VOID context
+	    wantarray         ? ($output, $tree)  # LIST context
+	  : defined wantarray ? $output           # SCALAR context
+	  :                     print $output;    # VOID context
 }
 
+#--------------------
 =section Internal administration
 
 =method defineMacro $tag, $attrs, $then, $else
+
+=error macro requires a name
+=error macros cannot have an else part ($macro)
 =cut
 
 sub defineMacro($$$$)
-{   my ($self, $tag, $attrs, $then, $else) = @_;
-    my $name = delete $attrs->{name}
-        or error __x"macro requires a name";
+{	my ($self, $tag, $attrs, $then, $else) = @_;
+	my $name = delete $attrs->{name}
+		or error __x"macro requires a name";
 
-    defined $else
-        and error __x"macros cannot have an else part ({macro})",macro => $name;
+	defined $else
+		and error __x"macros cannot have an else part ({macro})",macro => $name;
 
-    my %attrs = %$attrs;   # for closure
-    $attrs{markers} = $self->valueFor('markers');
+	my %attrs = %$attrs;   # for closure
+	$attrs{markers} = $self->valueFor('markers');
 
-    $self->{macros}{$name} =
-        sub { my ($tag, $at) = @_;
-              $self->process($then, +{%attrs, %$at});
-            };
+	$self->{macros}{$name}          =
+sub {my ($tag, $at) = @_;
+			$self->process($then, +{%attrs, %$at});
+			};
 
-    ();
-    
+	();
+
 }
 
 =method valueFor $tag, [$attrs, $then, $else]
@@ -278,37 +290,36 @@ a code reference which is to produce new values dynamicly.
 =cut
 
 sub valueFor($;$$$)
-{   my ($self, $tag, $attrs, $then, $else) = @_;
+{	my ($self, $tag, $attrs, $then, $else) = @_;
 
-    for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
-    {   my $v = $set->{$tag};
+	for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
+	{	my $v = $set->{$tag};
 
-        if(defined $v)
-        {   # HASH  defines container
-            # ARRAY defines container loop
-            # object or other things can be stored as well, but may get
-            # stringified.
-            return wantarray ? ($v, $attrs, $then, $else) : $v
-                if ref $v ne 'CODE';
+		if(defined $v)
+		{	# HASH  defines container
+			# ARRAY defines container loop
+			# object or other things can be stored as well, but may get
+			# stringified.
+			return wantarray ? ($v, $attrs, $then, $else) : $v
+				if ref $v ne 'CODE';
 
-            return wantarray
-                 ? $v->($tag, $attrs, $then, $else)
-                 : ($v->($tag, $attrs, $then, $else))[0]
-        }
+			my @w = $v->($tag, $attrs, $then, $else);
+			return wantarray ? @w : $w[0];
+		}
 
-        return wantarray ? (undef, $attrs, $then, $else) : undef
-            if exists $set->{$tag};
+		return wantarray ? (undef, $attrs, $then, $else) : undef
+			if exists $set->{$tag};
 
-        my $code = $set->{DYNAMIC};
-        if(defined $code)
-        {   my ($value, @other) = $code->($tag, $attrs, $then, $else);
-            return wantarray ? ($value, @other) : $value
-                if defined $value;
-            # and continue the search otherwise
-        }
-    }
+		my $code = $set->{DYNAMIC};
+		if(defined $code)
+		{	my ($value, @other) = $code->($tag, $attrs, $then, $else);
+			return wantarray ? ($value, @other) : $value
+				if defined $value;
+			# and continue the search otherwise
+		}
+	}
 
-    wantarray ? (undef, $attrs, $then, $else) : undef;
+	wantarray ? (undef, $attrs, $then, $else) : undef;
 }
 
 =method allValuesFor $tag, [$attrs, $then, $else]
@@ -317,54 +328,54 @@ preferred is listed first.
 =cut
 
 sub allValuesFor($;$$$)
-{   my ($self, $tag, $attrs, $then, $else) = @_;
-    my @values;
+{	my ($self, $tag, $attrs, $then, $else) = @_;
+	my @values;
 
-    for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
-    {   
-        if(defined(my $v = $set->{$tag}))
-        {   my $t = ref $v eq 'CODE' ? $v->($tag, $attrs, $then, $else) : $v;
-            push @values, $t if defined $t;
-        }
+	for(my $set = $self->{values}; defined $set; $set = $set->{NEXT})
+	{
+		if(defined(my $v = $set->{$tag}))
+		{	my $t = ref $v eq 'CODE' ? $v->($tag, $attrs, $then, $else) : $v;
+			push @values, $t if defined $t;
+		}
 
-        if(defined(my $code = $set->{DYNAMIC}))
-        {   my $t = $code->($tag, $attrs, $then, $else);
-            push @values, $t if defined $t;
-        }
-    }
+		if(defined(my $code = $set->{DYNAMIC}))
+		{	my $t = $code->($tag, $attrs, $then, $else);
+			push @values, $t if defined $t;
+		}
+	}
 
-    @values;
+	@values;
 }
 
-=method pushValues HASH
-Add new level of values to the known list.  The data in the HASH is
+=method pushValues \%values
+Add new level of %values to the known list.  The data in the HASH is
 copied, and a reference to the copy returned.  The copy may be changed
 afterwards.
 =cut
 
 sub pushValues($)
-{   my ($self, $attrs) = @_;
+{	my ($self, $attrs) = @_;
 
-    if(my $markers = $attrs->{markers})
-    {   my @markers = ref $markers eq 'ARRAY' ? @$markers
-          : map {s/\\\,//g; $_} split /(?!<\\)\,\s*/, $markers;
+	if(my $markers = $attrs->{markers})
+	{	my @markers = ref $markers eq 'ARRAY' ? @$markers
+		: map {s/\\\,//g; $_} split /(?!<\\)\,\s*/, $markers;
 
-        push @markers, $markers[0] . '/'
-            if @markers==2;
+		push @markers, $markers[0] . '/'
+			if @markers==2;
 
-        push @markers, $markers[1]
-            if @markers==3;
+		push @markers, $markers[1]
+			if @markers==3;
 
-        $attrs->{markers}
-          = [ map { ref $_ eq 'Regexp' ? $_ : qr/\Q$_/ } @markers ];
-    }
+		$attrs->{markers}
+		= [ map { ref $_ eq 'Regexp' ? $_ : qr/\Q$_/ } @markers ];
+	}
 
-    if(my $search = $attrs->{search})
-    {   $attrs->{search} = [ split /\:/, $search ]
-            if ref $search ne 'ARRAY';
-    }
+	if(my $search = $attrs->{search})
+	{	$attrs->{search} = [ split /\:/, $search ]
+			if ref $search ne 'ARRAY';
+	}
 
-    $self->{values} = { %$attrs, NEXT => $self->{values} };
+	$self->{values} = { %$attrs, NEXT => $self->{values} };
 }
 
 =method popValues
@@ -372,78 +383,85 @@ Remove one level of values.
 =cut
 
 sub popValues()
-{   my $self = shift;
-    $self->{values} = $self->{values}{NEXT};
+{	my $self = shift;
+	$self->{values} = $self->{values}{NEXT};
 }
 
 =method includeTemplate $tag, $attrs, $then, $else
 This is the implementation for the C<template> tag.
+
+=error template is not a container
+=error cannot find template file $file
+=error cannot find macro $name
+=error file or macro attribute required for template in $source
 =cut
 
 sub includeTemplate($$$)
-{   my ($self, $tag, $attrs, $then, $else) = @_;
+{	my ($self, $tag, $attrs, $then, $else) = @_;
 
-    defined $then || defined $else
-        and error __x"template is not a container";
+	defined $then || defined $else
+		and error __x"template is not a container";
 
-    if(my $fn = $attrs->{file})
-    {   my $output = $self->processFile($fn, $attrs);
-        $output    = $self->processFile($attrs->{alt}, $attrs)
-            if !defined $output && $attrs->{alt};
+	if(my $fn = $attrs->{file})
+	{	my $output = $self->processFile($fn, $attrs);
+		$output    = $self->processFile($attrs->{alt}, $attrs)
+			if !defined $output && $attrs->{alt};
 
-        defined $output
-            or error __x"cannot find template file {fn}", fn => $fn;
+		defined $output
+			or error __x"cannot find template file {file}", file => $fn;
 
-        return ($output);
-    }
+		return ($output);
+	}
 
-    if(my $name = $attrs->{macro})
-    {    my $macro = $self->{macros}{$name}
-            or error __x"cannot find macro {name}", name => $name;
+	if(my $name = $attrs->{macro})
+	{	my $macro = $self->{macros}{$name}
+			or error __x"cannot find macro {name}", name => $name;
 
-        return $macro->($tag, $attrs, $then, $else);
-    }
+		return $macro->($tag, $attrs, $then, $else);
+	}
 
-    error __x"file or macro attribute required for template in {source}"
-      , source => $self->valueFor('source') || '??';
+	error __x"file or macro attribute required for template in {source}", source => $self->valueFor('source') || '??';
 }
 
 =method loadFile FILENAME
-Returns a string containing the whole contents of the file, or C<undef>
+Returns a string containing the whole contents of the file, or undef
 if the file was not found.
 =cut
 
+=fault Cannot read from $fn in $file: $!
+=cut
+
 sub loadFile($)
-{   my ($self, $relfn) = @_;
-    my $absfn;
+{	my ($self, $relfn) = @_;
+	my $absfn;
 
-    if(file_name_is_absolute $relfn)
-    {   my $fn = canonpath $relfn;
-        $absfn = $fn if -f $fn;
-    }
+	if(file_name_is_absolute $relfn)
+	{	my $fn = canonpath $relfn;
+		$absfn = $fn if -f $fn;
+	}
 
-    unless($absfn)
-    {   my @srcs = map @$_, $self->allValuesFor('search');
-        foreach my $dir (@srcs)
-        {   $absfn = rel2abs $relfn, $dir;
-            last if -f $absfn;
-            $absfn = undef;
-        }
-    }
+	unless($absfn)
+	{	my @srcs = map @$_, $self->allValuesFor('search');
+		foreach my $dir (@srcs)
+		{	$absfn = rel2abs $relfn, $dir;
+			last if -f $absfn;
+			$absfn = undef;
+		}
+	}
 
-    defined $absfn
-        or return undef;
+	defined $absfn
+		or return undef;
 
-    open my $in, '<:encoding(utf-8)', $absfn;
-    unless(defined $in)
-    {   my $source = $self->valueFor('source') || '??';
-        fault __x"Cannot read from {fn} in {file}", fn => $absfn, file=>$source;
-    }
+	open my $in, '<:encoding(utf-8)', $absfn;
+	unless(defined $in)
+	{	my $source = $self->valueFor('source') || '??';
+		fault __x"Cannot read from {fn} in {file}", fn => $absfn, file=>$source;
+	}
 
-    \(join '', $in->getlines);  # auto-close in
+	\(join '', $in->getlines);  # auto-close in
 }
 
-#---------------
+#--------------------
 =section Parsing
 
 =method parse STRING, (HASH|PAIRS)
@@ -451,8 +469,8 @@ This method is deprecated.  Please use M<process()>.
 =cut
 
 sub parse($@)
-{   my ($self, $template) = (shift, shift);
-    $self->process(\$template, @_);
+{	my ($self, $template) = (shift, shift);
+	$self->process(\$template, @_);
 }
 
 =method parseTemplate STRING
@@ -461,59 +479,59 @@ needs to be called with the correct values.
 =cut
 
 sub parseTemplate($)
-{   my ($self, $template) = @_;
-    defined $template or return undef;
+{	my ($self, $template) = @_;
+	defined $template or return undef;
 
-    my $markers = $self->valueFor('markers');
+	my $markers = $self->valueFor('markers');
 
-    # Remove white-space escapes
-    $template =~ s! \\ (?: \s* (?: \\ \s*)? \n)+
-                    (?: \s* (?= $markers->[0] | $markers->[3] ))?
-                  !!mgx;
+	# Remove white-space escapes
+	$template =~ s! \\ (?: \s* (?: \\ \s*)? \n)+
+					(?: \s* (?= $markers->[0] | $markers->[3] ))?
+				!!mgx;
 
-    my @frags;
+	my @frags;
 
-    # NOT_$tag supported for backwards compat
-    while( $template =~ s!^(.*?)        # text before container
-                           $markers->[0] \s*
-                           (?: IF \s* )?
-                           (NOT (?:_|\s+) )?
-                           ([\w.-]+) \s*    # tag
-                           (.*?) \s*    # attributes
-                           $markers->[1]
-                         !!xs
-         )
-    {   push @frags, $1;
-        my ($not, $tag, $attr) = ($2, $3, $4);
-        my ($then, $else);
+	# NOT_$tag supported for backwards compat
+	while( $template =~ s!^(.*?)        # text before container
+							$markers->[0] \s*
+							(?: IF \s* )?
+							(NOT (?:_|\s+) )?
+							([\w.-]+) \s*    # tag
+							(.*?) \s*    # attributes
+							$markers->[1]
+						!!xs
+		)
+	{	push @frags, $1;
+		my ($not, $tag, $attr) = ($2, $3, $4);
+		my ($then, $else);
 
-        if($template =~ s! (.*?)           # contained
-                           ( $markers->[2]
-                             \s* \Q$tag\E \s*  # "our" tag
-                             $markers->[3]
-                           )
-                         !!xs)
-        {   $then       = $1;
-            my $endline = $2;
-        }
+		if($template =~ s! (.*?)           # contained
+							( $markers->[2]
+							\s* \Q$tag\E \s*  # "our" tag
+							$markers->[3]
+							)
+						!!xs)
+		{	$then       = $1;
+			my $endline = $2;
+		}
 
-        if($not) { ($then, $else) = (undef, $then) }
-        elsif(!defined $then) { }
-        elsif($then =~ s! $markers->[0]
-                          \s* ELSE (?:_|\s+)
-                          \Q$tag\E \s*
-                          $markers->[1]
-                          (.*)
-                        !!xs)
-        {   # $else_$tag for backwards compat
-            $else = $1;
-        }
+		if($not) { ($then, $else) = (undef, $then) }
+		elsif(!defined $then) { }
+		elsif($then =~ s! $markers->[0]
+						\s* ELSE (?:_|\s+)
+						\Q$tag\E \s*
+						$markers->[1]
+						(.*)
+						!!xs)
+		{	# $else_$tag for backwards compat
+			$else = $1;
+		}
 
-        push @frags, [$tag, $self->parseAttrs($attr), $then, $else];
-    }
+		push @frags, [$tag, $self->parseAttrs($attr), $then, $else];
+	}
 
-    push @frags, $template;
-    \@frags;
+	push @frags, $template;
+	\@frags;
 }
 
 =method parseAttrs STRING
@@ -522,67 +540,71 @@ the called code fragments.  The STRING syntax is described in the
 DETAILS section of this manual page.
 =cut
 
+=error attribute error in '$tag'
+=cut
+
 sub parseAttrs($)
-{   my ($self, $string) = @_;
+{	my ($self, $string) = @_;
 
-    my %attrs;
-    while( $string =~
-        s!^\s* (?: '([^']+)'        # attribute name (might be quoted)
-               |   "([^"]+)"
-               |   (\w+)
-               )
-           \s* (?: \= \>? \s*       # an optional value
-                   ( \"[^"]*\"          # dquoted value
-                   | \'[^']*\'          # squoted value
-                   | \$\{ [^}]+ \}      # complex variable
-                   | [^\s,]+            # unquoted value
-                   )
-                )?
-                \s* \,?             # optionally separated by commas
-         !!xs)
-    {   my ($k, $v) = ($1||$2||$3, $4);
-        unless(defined $v)
-        {  $attrs{$k} = 1;
-           next;
-        }
+	my %attrs;
+	while( $string =~ s!
+			^ \s*
+				(?: '([^']+)'     # attribute name (might be quoted)
+				|   "([^"]+)"
+				|   (\w+)
+				)
+			\s* (?: \= \>? \s*    # an optional value
+				( \"[^"]*\"       # dquoted value
+				| \'[^']*\'       # squoted value
+				| \$\{ [^}]+ \}   # complex variable
+				| [^\s,]+         # unquoted value
+				)
+			)?
+			\s* \,?               # optionally separated by commas
+		!!xs)
+	{	my ($k, $v) = ($1||$2||$3, $4);
+		unless(defined $v)
+		{	$attrs{$k} = 1;
+			next;
+		}
 
-        if($v =~ m/^\'(.*)\'$/)
-        {   # Single quoted parameter, no interpolation
-            $attrs{$k} = $1;
-            next;
-        }
+		if($v =~ m/^\'(.*)\'$/)
+		{	# Single quoted parameter, no interpolation
+			$attrs{$k} = $1;
+			next;
+		}
 
-        $v =~ s/^\"(.*)\"$/$1/;
-        my @v = split /( \$\{[^\}]+\} | \$\w+ )/x, $v;
+		$v =~ s/^\"(.*)\"$/$1/;
+		my @v = split /( \$\{[^\}]+\} | \$\w+ )/x, $v;
 
-        if(@v==1 && $v[0] !~ m/^\$/)
-        {   $attrs{$k} = $v[0];
-            next;
-        }
+		if(@v==1 && $v[0] !~ m/^\$/)
+		{	$attrs{$k} = $v[0];
+			next;
+		}
 
-        my @steps;
-        foreach (@v)
-        {   if( m/^ (?: \$(\w+) | \$\{ (\w+) \s* \} ) $/x )
-            {   push @steps, [ $+ ];
-            }
-            elsif( m/^ \$\{ (\w+) \s* ([^\}]+? \s* ) \} $/x )
-            {   push @steps, [ $1, $self->parseAttrs($2) ];
-            }
-            else
-            {   push @steps, $_ if length $_;
-            }
-        }
+		my @steps;
+		foreach (@v)
+		{	if( m/^ (?: \$(\w+) | \$\{ (\w+) \s* \} ) $/x )
+			{	push @steps, [ $+ ];
+			}
+			elsif( m/^ \$\{ (\w+) \s* ([^\}]+? \s* ) \} $/x )
+			{	push @steps, [ $1, $self->parseAttrs($2) ];
+			}
+			else
+			{	push @steps, $_ if length $_;
+			}
+		}
 
-        $attrs{$k} = \@steps;
-    }
+		$attrs{$k} = \@steps;
+	}
 
-    error __x"attribute error in '{tag}'", tag => $_[1]
-        if length $string;
+	error __x"attribute error in '{tag}'", tag => $_[1]
+		if length $string;
 
-    \%attrs;
+	\%attrs;
 }
 
-#-----------------------
+#--------------------
 =chapter DETAILS
 
 This module works as simple as possible: pass a string to M<process()>
@@ -603,50 +625,50 @@ to.
 
 the output is sent to the selected file-handle:
 
- use OODoc::Template;
- my $t = OODoc::Template->new;
+  use OODoc::Template;
+  my $t = OODoc::Template->new;
 
- my $template = ".....";  # usually read from file
- my %values   = ( a => 3 );
+  my $template = ".....";  # usually read from file
+  my %values   = ( a => 3 );
 
- open OUTPUT, ">", $filename or die;
- select OUTPUT;
+  open OUTPUT, ">", $filename or die;
+  select OUTPUT;
 
- $t->process($template, \%values);
+  $t->process($template, \%values);
 
 or
 
- $t->process($template, a => 3);
+  $t->process($template, a => 3);
 
 
 =item . SCALAR context
 
 the output is returned as string:
 
- my $output = $t->process($parsed, a => 13);
+  my $output = $t->process($parsed, a => 13);
 
 =item . LIST context
 
 now both the output as the parsed template are returned.  You can reuse
 the parsed templates, improving the performance enormously:
 
- my ($output, $parsed) = $t->process($template, a => 42);
+  my ($output, $parsed) = $t->process($template, a => 42);
 
 =back
- 
+
 =subsection prepare for performance
 
 When used in a website, you may want to produce the various templates
 once, before the processes get forked.  Just select the output to
 the null device, and then call all templates once.
 
-   my %top;
-   foreach my $lang ( qw/en nl de/ )
-   {   my ($output, $parsed) = $t->process($template, lang => $lang);
-       $top{$lang} = $parsed;
-   }
+  my %top;
+  foreach my $lang ( qw/en nl de/ )
+  {   my ($output, $parsed) = $t->process($template, lang => $lang);
+      $top{$lang} = $parsed;
+  }
 
-   print $t->process($top{nl}, a => 42);
+  print $t->process($top{nl}, a => 42);
 
 Some processing tricks will seriously hinder the caching of the parsed
 templates.  If you use DYNAMIC, then you are on your own.  If you use
@@ -659,13 +681,13 @@ The C<$template> string contains HTML with special comment blocks.  These
 special comment blocks are replaced by the specified C<values>.  The block
 can appear in two shapes (which may provided different output):
 
-   <!--{TAG ATTRIBUTES}-->
-      some text
-   <!--{/TAG}-->
+  <!--{TAG ATTRIBUTES}-->
+     some text
+  <!--{/TAG}-->
 
 or
 
-   <!--{TAG ATTRIBUTES}-->
+  <!--{TAG ATTRIBUTES}-->
 
 The first example shows a I<container>, the second a terminal tag.
 The TAG is one of the specified values. ATTRIBUTES are used when the
@@ -682,9 +704,9 @@ simple container.  When the container has values attached to is (always
 a HASH or ARRAY-of-HASHES filled with key-value pairs), the content
 is displayed.  So, a simple if-then looks like this:
 
- <!--{want_something ATTRIBUTES}-->
-   ...
- <!--{/want_something}-->
+  <!--{want_something ATTRIBUTES}-->
+    ...
+  <!--{/want_something}-->
 
 The optional ATTRIBUTES are extra values set when processing the
 container.  The pre-defined tag C<defined> can be used to only
@@ -693,28 +715,28 @@ set attributes: it's a no-op.
 You may decide to be more explicit in the if-then, by using the
 optional C<IF> keyword:
 
- <!--{IF want_something ATTRIBUTES}-->
-   ...
- <!--{/want_something}-->
+  <!--{IF want_something ATTRIBUTES}-->
+    ...
+  <!--{/want_something}-->
 
 When the TAG starts with C<<NOT >> or C<<NOT_>>, it is used to negate
 the boolean interpretation of the values returned by evaluating the tag:
 
- <!--{NOT want_something ATTRIBUTES}-->
-   ...
- <!--{/want_something}-->
+  <!--{NOT want_something ATTRIBUTES}-->
+    ...
+  <!--{/want_something}-->
 
 An if-then-else looks like this:
 
- <!--{want_something ATTRIBUTES}-->
-   ...
- <!--{ELSE want_something}-->
-   ...
- <!--{/want_something}-->
+  <!--{want_something ATTRIBUTES}-->
+    ...
+  <!--{ELSE want_something}-->
+    ...
+  <!--{/want_something}-->
 
 The C<want_something> tag must produce either a HASH or an ARRAY-of-HASHes
-or C<undef>, because that is what containers do.  Because of parser
-limitations, the 
+or undef, because that is what containers do.  Because of parser
+limitations, the
 
 =section Definition
 
@@ -723,38 +745,38 @@ limitations, the
 Tags are barewords (may only contain [0-9a-zA-Z_]), which are looked-up in
 the C<< %values >>, which are passed with M<new()> and M<process()> to
 produce a value.
- 
+
 =subsection attributes
 
 Attibutes are values which are used when the text which is to be inserted
 is produced dynamically.  Their syntax is like this:
 
- # attributes are optionally separated by comma's
- attrs:  attr , attrs
-       | attr attrs
+  # attributes are optionally separated by comma's
+  attrs:  attr , attrs
+        | attr attrs
 
- # a hash initiation syntax may be used, but single
- # barewords as well
- attr:   bareword
-       | bareword => " string " | bareword = " string "
-       | bareword => ' char* '  | bareword = ' char* '
-       | bareword => bareword   | bareword = bareword
-       | bareword => variable   | bareword = variable
+  # a hash initiation syntax may be used, but single
+  # barewords as well
+  attr:   bareword
+        | bareword => " string " | bareword = " string "
+        | bareword => ' char* '  | bareword = ' char* '
+        | bareword => bareword   | bareword = bareword
+        | bareword => variable   | bareword = variable
 
- string: ( char | variable ) *
+  string: ( char | variable ) *
 
- # pass value produced by other tag
- variable:
-         '$' tag
-       | '${' tag attrs '}'
+  # pass value produced by other tag
+  variable:
+          '$' tag
+        | '${' tag attrs '}'
 
 A string may contain variables, which are stringified.  This means that
 tags which produce hashes or arrays are not usuable to interpolate.
 
 =examples
 
- <!--{section nr => 2, show_number, a => "monkey", chapter => $cnr}-->
- <!--{section nr=2 show_number a=monkey chapter=$cnr}-->
+  <!--{section nr => 2, show_number, a => "monkey", chapter => $cnr}-->
+  <!--{section nr=2 show_number a=monkey chapter=$cnr}-->
 
 The attributes result (internally) in a hash (of ARGS) which contains
 the keys C<nr>, C<show_number>, C<a>, and C<chapter> with respecively
@@ -763,12 +785,12 @@ values C<2>, true, C<monkey>, and the looked-up value for C<cnr>.
 =subsection values
 
 The values which are related to the tags are rather powerful.  When
-a certain tag can not be found, the value is C<undef>.
+a certain tag can not be found, the value is undef.
 
 =over 4
 
 =item * undef
-When the value is C<undef> (explicitly or because it was not found),
+When the value is undef (explicitly or because it was not found),
 the container or terminator will be skipped.  The whole text simply
 disappears.
 
@@ -816,13 +838,13 @@ the values defined by the innermost block (container) which defined a
 HASH or ARRAY of HASHes, and work the way back through the enclosing
 blocks until the initial values have been reached.
 
-If the tag was not found as key, C<undef> is used.  If the key was found,
+If the tag was not found as key, undef is used.  If the key was found,
 than the related value is treated as described in the previous section.
 
 Working through the list of blocks, a miss on a value HASH will cause
 a second lookup: for the key C<DYNAMIC>.  If a block's set of values
 contains this key, the related CODE reference is called to produce
-a value.  If the produced value is C<undef>, the search will continue
+a value.  If the produced value is undef, the search will continue
 to outer blocks.  Other results will be treated as any other value.
 
 The C<DYNAMIC> keys may be used like AUTOLOAD: to handle unexpected
@@ -897,15 +919,15 @@ symbols than the container itself.
 =example use of macro
 A macro is used to define a piece of template, but apply it later.
 
- <!--{macro name="chapter"}-->
-    <h2><!--{title}--></h2>
- <!--{/macro}-->
+  <!--{macro name="chapter"}-->
+     <h2><!--{title}--></h2>
+  <!--{/macro}-->
 
- <!--{template macro="chapter" title="hi there!"}-->
+  <!--{template macro="chapter" title="hi there!"}-->
 
 =example use of template file
 
- <!--{template file=$lang/header.txt alt=en/header.txt}->
+  <!--{template file=$lang/header.txt alt=en/header.txt}->
 
 =section White-space removal
 
@@ -924,17 +946,17 @@ the blanks are left intact.
 
 The template looks like this:
 
- The follow\
- ing error was\
+  The follow\
+  ing error was\
 
-  produced:
-     <!--{error}-->, \
-     <!--{errno}-->
+   produced:
+      <!--{error}-->, \
+      <!--{errno}-->
 
 The output is:
 
- The following error was produced:
-    No such file or directory, 2
+  The following error was produced:
+     No such file or directory, 2
 
 =cut
 
