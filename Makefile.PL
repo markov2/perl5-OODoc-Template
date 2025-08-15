@@ -71,7 +71,7 @@ WriteMakefile
 		prereqs => {
 			develop => {
 				requires => {
-					'OODoc' => '3.00',
+					'OODoc' => '3.02',
 				}
 			},
 			test => {

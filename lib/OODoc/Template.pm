@@ -111,13 +111,12 @@ sub init($)
 #--------------------
 =section Processing
 
-=method process STRING|SCALAR|ARRAY, \%params|%params
-The template is rendered inserting the %params.
+=method process $template, \%params|%params
+The $template is rendered inserting the %params.
 
-With a P<STRING> or P<SCALAR> (reference to a string), the template will
-be parsed first with M<parseTemplate()>.  With an P<ARRAY>, this work
-has already been done.
-=cut
+The $template can come in different forms: With a P<STRING> or P<SCALAR>
+(reference to a string), the template will be parsed first with
+M<parseTemplate()>.  With an P<ARRAY>, that work has already been done.
 
 =error value for $tag is $value, must be single
 =cut
@@ -127,9 +126,9 @@ sub process($)
 	my $values = @_==1 ? shift : +{ @_ };
 
 	my $tree     # parse with real copy
-	 = ref $templ eq 'SCALAR' ? $self->parseTemplate($$templ)
-	 : ref $templ eq 'ARRAY'  ? $templ
-	 :                          $self->parseTemplate("$templ");
+	  = ref $templ eq 'SCALAR' ? $self->parseTemplate($$templ)
+	  : ref $templ eq 'ARRAY'  ? $templ
+	  :                          $self->parseTemplate("$templ");
 
 	defined $tree
 		or return ();
@@ -208,12 +207,12 @@ sub process($)
 	  :                     print @output;              # VOID context
 }
 
-=method processFile FILENAME, HASH|PAIRS
-Process the content of the file with specified FILENAME.  The current
+=method processFile $file, \%values|%values
+Process the content of the file with specified $file.  The current
 value of the C<search> path is used as path to find it.  The returns
 behaves the same as M<process()>.
 
-If the FILENAME is not found, then undef is returned as output.
+If the $file is not found, then undef is returned as output.
 However, then this method is used in VOID context, there is no output:
 then an error is raised in stead.
 
@@ -270,23 +269,23 @@ sub defineMacro($$$$)
 	defined $else
 		and error __x"macros cannot have an else part ({macro})",macro => $name;
 
-	my %attrs = %$attrs;   # for closure
+	my %attrs       = %$attrs;   # for closure
 	$attrs{markers} = $self->valueFor('markers');
 
-	$self->{macros}{$name}          =
-sub {my ($tag, $at) = @_;
-			$self->process($then, +{%attrs, %$at});
-			};
+	$self->{macros}{$name} = sub {
+		my ($tag, $at) = @_;
+		$self->process($then, +{%attrs, %$at});
+	};
 
 	();
 
 }
 
-=method valueFor $tag, [$attrs, $then, $else]
+=method valueFor $tag, [\%attrs, $then, $else]
 Lookup the value for $tag in the known data.  See section L</values>
-about the way this is done.  The $attrs (HASH of key-value pairs)
-and $then/$else content text references are used when the $tag relates to
-a code reference which is to produce new values dynamicly.
+about the way this is done.  The %attrs and $then/$else content text
+references are used when the $tag relates to a code reference which is
+to produce new values dynamicly.
 =cut
 
 sub valueFor($;$$$)
@@ -426,7 +425,6 @@ sub includeTemplate($$$)
 =method loadFile FILENAME
 Returns a string containing the whole contents of the file, or undef
 if the file was not found.
-=cut
 
 =fault Cannot read from $fn in $file: $!
 =cut
@@ -464,7 +462,7 @@ sub loadFile($)
 #--------------------
 =section Parsing
 
-=method parse STRING, (HASH|PAIRS)
+=method parse $template, \%values|%values
 This method is deprecated.  Please use M<process()>.
 =cut
 
@@ -473,9 +471,9 @@ sub parse($@)
 	$self->process(\$template, @_);
 }
 
-=method parseTemplate STRING
-Try to understand the STRING. Returned is a reference to a tree which
-needs to be called with the correct values.
+=method parseTemplate $template
+Try to understand the $template (as STRING). Returned is a reference to
+a tree which needs to be called with the correct values.
 =cut
 
 sub parseTemplate($)
@@ -538,7 +536,6 @@ sub parseTemplate($)
 Returns an ARRAY of PAIRS which will create the attributes for
 the called code fragments.  The STRING syntax is described in the
 DETAILS section of this manual page.
-=cut
 
 =error attribute error in '$tag'
 =cut
