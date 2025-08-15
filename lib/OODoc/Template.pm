@@ -8,10 +8,10 @@ package OODoc::Template;
 use strict;
 use warnings;
 
-use Log::Report  'oodoc-template';
+use Log::Report    'oodoc-template';
 
 use File::Spec::Functions qw/file_name_is_absolute canonpath catfile rel2abs/;
-use Scalar::Util          qw/weaken/;
+use Scalar::Util   qw/weaken/;
 
 my @default_markers = ('<!--{', '}-->', '<!--{/', '}-->');
 
@@ -114,9 +114,9 @@ sub init($)
 =method process $template, \%params|%params
 The $template is rendered inserting the %params.
 
-The $template can come in different forms: With a P<STRING> or P<SCALAR>
+The $template can come in different forms: With a C<STRING> or C<SCALAR>
 (reference to a string), the template will be parsed first with
-M<parseTemplate()>.  With an P<ARRAY>, that work has already been done.
+M<parseTemplate()>.  With an C<ARRAY>, that work has already been done.
 
 =error value for $tag is $value, must be single
 =cut
@@ -148,9 +148,10 @@ sub process($)
 
 		my %attrs;
 		while(my($k, $v) = each %$attr)
-		{	$attrs{$k} = ref $v ne 'ARRAY' ? $v
-			: @$v==1 ? scalar $self->valueFor(@{$v->[0]})
-			: join '', map {ref $_ eq 'ARRAY' ? scalar $self->valueFor(@$_) : $_} @$v;
+		{	$attrs{$k}
+			  = ref $v ne 'ARRAY' ? $v
+			  : @$v==1 ? scalar $self->valueFor(@{$v->[0]})
+			  : join '', map {ref $_ eq 'ARRAY' ? scalar $self->valueFor(@$_) : $_} @$v;
 		}
 
 		(my $value, my $attrs, $then, $else) = $self->valueFor($tag, \%attrs, $then, $else);
@@ -159,8 +160,7 @@ sub process($)
 		{	defined $value or next NODE;
 
 			ref $value ne 'ARRAY' && ref $value ne 'HASH'
-				or error __x"value for {tag} is {value}, must be single",
-						tag => $tag, value => $value;
+				or error __x"value for {tag} is {value}, must be single", tag => $tag, value => $value;
 
 			push @output, $value;
 			next NODE;
@@ -225,7 +225,7 @@ call this method as often as you want without serious penalty.
 sub processFile($;@)
 {	my ($self, $filename) = (shift, shift);
 
-	my $values = @_==1 ? shift : {@_};
+	my $values = @_==1 ? shift : +{ @_ };
 	$values->{source} ||= $filename;
 
 	my $cache  = $self->{cached};
@@ -267,14 +267,14 @@ sub defineMacro($$$$)
 		or error __x"macro requires a name";
 
 	defined $else
-		and error __x"macros cannot have an else part ({macro})",macro => $name;
+		and error __x"macros cannot have an else part ({macro})", macro => $name;
 
 	my %attrs       = %$attrs;   # for closure
 	$attrs{markers} = $self->valueFor('markers');
 
 	$self->{macros}{$name} = sub {
 		my ($tag, $at) = @_;
-		$self->process($then, +{%attrs, %$at});
+		$self->process($then, +{ %attrs, %$at });
 	};
 
 	();
@@ -389,7 +389,7 @@ sub popValues()
 =method includeTemplate $tag, $attrs, $then, $else
 This is the implementation for the C<template> tag.
 
-=error template is not a container
+=error a template is not a container
 =error cannot find template file $file
 =error cannot find macro $name
 =error file or macro attribute required for template in $source
@@ -399,7 +399,7 @@ sub includeTemplate($$$)
 {	my ($self, $tag, $attrs, $then, $else) = @_;
 
 	defined $then || defined $else
-		and error __x"template is not a container";
+		and error __x"a template is not a container";
 
 	if(my $fn = $attrs->{file})
 	{	my $output = $self->processFile($fn, $attrs);
@@ -532,10 +532,10 @@ sub parseTemplate($)
 	\@frags;
 }
 
-=method parseAttrs STRING
-Returns an ARRAY of PAIRS which will create the attributes for
-the called code fragments.  The STRING syntax is described in the
-DETAILS section of this manual page.
+=method parseAttrs $attrs
+Returns an ARRAY of PAIRS which will create the attributes for the called
+code fragments.  The $attrs STRING syntax is described in the DETAILS
+section of this manual page.
 
 =error attribute error in '$tag'
 =cut
