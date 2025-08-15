@@ -1,6 +1,7 @@
 use ExtUtils::MakeMaker;
 
 require 5.016;
+my $version  = '0.20';
 
 # Use command 'oodist' to produce the documentation before the software release.
 my $git      = "https://github.com/markov2/perl5-OODoc-Template";
@@ -47,7 +48,7 @@ my %oodist   = (
 
 WriteMakefile
 	NAME       => 'OODoc::Template',
-	VERSION    => 0.19,
+	VERSION    => $version,
 	AUTHOR     => 'Mark Overmeer',
 	ABSTRACT   => 'Simple template system',
 	PREREQ_PM  => {
