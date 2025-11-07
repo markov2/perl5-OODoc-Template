@@ -46,16 +46,17 @@ my %oodist   = (
 	],
 );
 
+my %requires = (
+	'File::Spec::Functions' => 0,
+	'Log::Report'  => 1.40,
+	'Scalar::Util' => 0,
+);
+
 WriteMakefile
 	NAME       => 'OODoc::Template',
 	VERSION    => $version,
 	AUTHOR     => 'Mark Overmeer',
 	ABSTRACT   => 'Simple template system',
-	PREREQ_PM  => {
-		'File::Spec::Functions' => 0,
-		'Log::Report'  => 1.40,
-		'Scalar::Util' => 0,
-	},
 	LICENSE    => 'perl_5',
 	META_MERGE => {
 		'meta-spec' => { version => 2 },
@@ -65,20 +66,26 @@ WriteMakefile
 				url  => "$git.git",
 				web  => $git,
 			},
+			bugtracker => {
+				web  => "$git/issues",
+			},
 			homepage => $homepage,
 			license  => [ 'https://dev.perl.org/licenses/' ],
 		},
 		prereqs => {
+			runtime => {
+				requires => \%requires,
+			},
 			develop => {
 				requires => {
 					'OODoc' => '3.02',
-				}
+				},
 			},
 			test => {
 				requires => {
 					'Test::More' => 0.47,
 					'Test::Pod'  => 1.00,
-				}
+				},
 			},
 		},
 
